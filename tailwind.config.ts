@@ -57,6 +57,12 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        ticket: {
+          DEFAULT: "hsl(var(--ticket-bg))",
+          border: "hsl(var(--ticket-border))",
+          header: "hsl(var(--ticket-header))",
+          label: "hsl(var(--ticket-label))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
