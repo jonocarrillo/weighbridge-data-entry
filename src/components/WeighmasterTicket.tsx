@@ -136,13 +136,7 @@ const WeighmasterTicket = ({ onSubmit, editEntry, onCancelEdit }: WeighmasterTic
           </div>
           <div className="ticket-field flex-1">
             <span className="ticket-label">Weighmaster #</span>
-            <input
-              type="text"
-              value={formData.weighmasterNumber}
-              onChange={(e) => handleChange('weighmasterNumber', e.target.value)}
-              className="ticket-input"
-              placeholder="WM-001"
-            />
+            <div className="ticket-input bg-muted font-bold">{formData.invoiceNumber || '------'}</div>
           </div>
         </div>
 
