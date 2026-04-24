@@ -17,13 +17,16 @@ const WeighmasterForm = ({ onSubmit, editEntry, onCancelEdit }: WeighmasterFormP
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const tonnage = calculateTonnage(Number(formData.weighIn), Number(formData.weighOut));
+    const weighIn = formData.weighIn === '' || formData.weighIn === null || formData.weighIn === undefined ? 0 : Number(formData.weighIn);
+    const weighOut = formData.weighOut === '' || formData.weighOut === null || formData.weighOut === undefined ? 0 : Number(formData.weighOut);
+    const amount = formData.amount === '' || formData.amount === null || formData.amount === undefined ? 0 : Number(formData.amount);
+    const tonnage = weighIn > 0 && weighOut > 0 ? calculateTonnage(weighIn, weighOut) : 0;
     const entry: WeighmasterEntry = {
       ...formData,
       id: editEntry?.id || crypto.randomUUID(),
-      weighIn: Number(formData.weighIn),
-      weighOut: Number(formData.weighOut),
-      amount: Number(formData.amount),
+      weighIn,
+      weighOut,
+      amount,
       tonnage,
     };
     onSubmit(entry);
@@ -32,8 +35,9 @@ const WeighmasterForm = ({ onSubmit, editEntry, onCancelEdit }: WeighmasterFormP
     }
   };
 
-  const netWeight = Math.abs(Number(formData.weighIn) - Number(formData.weighOut));
-  const calculatedTonnage = calculateTonnage(Number(formData.weighIn), Number(formData.weighOut));
+  const hasBothWeights = formData.weighIn !== '' && formData.weighIn !== 0 && formData.weighOut !== '' && formData.weighOut !== 0;
+  const netWeight = hasBothWeights ? Math.abs(Number(formData.weighIn) - Number(formData.weighOut)) : 0;
+  const calculatedTonnage = hasBothWeights ? calculateTonnage(Number(formData.weighIn), Number(formData.weighOut)) : 0;
 
   return (
     <form onSubmit={handleSubmit} className="certificate-card rounded-lg overflow-hidden">

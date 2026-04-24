@@ -28,29 +28,36 @@ const ExportControls = ({ entries }: ExportControlsProps) => {
       'PAYMENTYPE'
     ];
 
+    const blankIfZero = (n: number) => (n === 0 || Number.isNaN(n) || n === null || n === undefined ? '' : n);
+    const hasBothWeights = (e: WeighmasterEntry) => Number(e.weighIn) > 0 && Number(e.weighOut) > 0;
+
     const rows = entries.map(entry => [
       entry.invoiceNumber,
       entry.wasteData,
       entry.timeIn,
       entry.timeOut,
       entry.memo,
-      entry.weighIn,
-      entry.weighOut,
+      blankIfZero(Number(entry.weighIn)),
+      blankIfZero(Number(entry.weighOut)),
       entry.truckId,
       entry.address,
-      entry.tonnage,
+      hasBothWeights(entry) ? blankIfZero(Number(entry.tonnage)) : '',
       entry.date,
       entry.customer,
       entry.weighmasterNumber,
       entry.productService,
       entry.city,
-      entry.amount,
+      blankIfZero(Number(entry.amount)),
       entry.paymentType
     ]);
 
     const csvContent = [
       headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+      ...rows.map(row => row.map(cell => {
+        if (cell === '' || cell === null || cell === undefined) return '';
+        if (typeof cell === 'number') return String(cell);
+        return `"${String(cell).replace(/"/g, '""')}"`;
+      }).join(','))
     ].join('\n');
 
     return csvContent;
