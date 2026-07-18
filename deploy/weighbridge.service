@@ -1,0 +1,30 @@
+# systemd unit — Raspberry Pi / Linux 24/7 deployment
+# Install:
+#   sudo cp deploy/weighbridge.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now weighbridge
+# Logs:
+#   journalctl -u weighbridge -f
+
+[Unit]
+Description=Weighbridge data entry server
+After=network.target
+
+[Service]
+Type=simple
+# Adjust user and path to your Pi setup
+User=pi
+WorkingDirectory=/home/pi/weighbridge-data-entry
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=3
+Environment=NODE_ENV=production
+Environment=PORT=3000
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=full
+ReadWritePaths=/home/pi/weighbridge-data-entry/data
+
+[Install]
+WantedBy=multi-user.target

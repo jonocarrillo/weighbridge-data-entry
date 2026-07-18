@@ -1,0 +1,1142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Weighmaster Ticket — AIS</title>
+<style>
+  :root {
+    --bg: #f2f3f5;
+    --panel: #ffffff;
+    --line: #d8dde3;
+    --text: #1c1f24;
+    --muted: #6b7380;
+    --accent: #00c8dc;
+    --accent-hover: #00aebf;
+    --orange: #f58220;
+    --green: #3cb446;
+    --slate: #465f82;
+    --label: #4a73b8;
+    --error: #b53030;
+    --info-bg: #e8f4ff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
+  body { font: 14px/1.4 "Segoe UI", system-ui, -apple-system, sans-serif; }
+
+  header.app-bar {
+    background: #1c2330;
+    color: #fff;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
+  header.app-bar h1 { font-size: 16px; margin: 0; font-weight: 600; letter-spacing: 0.5px; }
+  header.app-bar .sub { color: #a3b1c2; font-size: 12px; margin-left: auto; }
+  header.app-bar a.back { color: #a3b1c2; text-decoration: none; font-size: 12px; }
+  header.app-bar a.back:hover { color: #fff; }
+
+  .stepper-bar {
+    display: none;
+    padding: 8px 16px;
+    background: #fff;
+    border-bottom: 1px solid var(--line);
+    gap: 6px;
+    overflow-x: auto;
+  }
+  .stepper-bar .pip {
+    flex: 1;
+    min-width: 64px;
+    text-align: center;
+    padding: 6px 8px;
+    font-size: 11px;
+    color: var(--muted);
+    border-bottom: 3px solid transparent;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    white-space: nowrap;
+  }
+  .stepper-bar .pip.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  .stepper-bar .pip.done { color: var(--green); border-bottom-color: var(--green); }
+
+  main { padding: 16px; max-width: 1100px; margin: 0 auto; }
+
+  .row { display: grid; gap: 12px; }
+  .row.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .row.cols-2 { grid-template-columns: 1fr 1fr; }
+  .row.cols-1 { grid-template-columns: 1fr; }
+
+  section.panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 14px;
+    margin-bottom: 12px;
+  }
+  section.panel h2 {
+    margin: 0 0 12px;
+    font-size: 13px;
+    color: var(--label);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 6px;
+  }
+
+  label.field { display: block; margin-bottom: 8px; }
+  label.field > .lbl {
+    display: block;
+    color: var(--label);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 3px;
+    font-weight: 600;
+  }
+  label.field input[type=text], label.field input[type=number], label.field input[type=date], label.field input[type=time], label.field textarea, label.field select {
+    width: 100%;
+    padding: 9px 10px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: #fff;
+    font: inherit;
+    color: var(--text);
+  }
+  label.field input:focus, label.field textarea:focus, label.field select:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+    border-color: var(--accent);
+  }
+  label.field input.computed {
+    background: var(--info-bg);
+    font-weight: 600;
+    text-align: right;
+  }
+  label.field input.readonly {
+    background: #f4f6f9;
+    color: var(--muted);
+  }
+  label.field input[type=number], label.field input.numeric { text-align: right; font-variant-numeric: tabular-nums; }
+  label.field textarea { min-height: 80px; resize: vertical; }
+
+  .time-input { display: flex; gap: 6px; }
+  .time-input input { flex: 1; }
+  .time-input button { padding: 8px 10px; border: 1px solid var(--line); background: #fff; border-radius: 4px; cursor: pointer; min-width: 38px; }
+  .time-input .badge { font-size: 11px; padding: 4px 8px; border-radius: 3px; font-weight: 700; }
+  .time-input .badge.in { background: #e6f7e9; color: var(--green); }
+  .time-input .badge.out { background: #fde4dc; color: var(--error); }
+
+  .radios { display: flex; flex-wrap: wrap; gap: 14px; padding: 6px 0; }
+  .radios label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+  .radios input[type=radio] { width: 18px; height: 18px; cursor: pointer; }
+
+  .expected-hint {
+    font-size: 12px;
+    color: var(--muted);
+    font-style: italic;
+    margin-top: 4px;
+    min-height: 1.2em;
+  }
+  .expected-hint.found { color: var(--slate); font-style: normal; }
+  .expected-hint.miss { color: #b07700; font-style: normal; }
+
+  .checks { display: flex; flex-wrap: wrap; gap: 18px; padding: 6px 0; }
+  .checks label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+  .checks input[type=checkbox] { width: 18px; height: 18px; cursor: pointer; }
+
+  .sig-wrap { display: flex; flex-direction: column; gap: 8px; }
+  .sig-canvas-frame {
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: #fff;
+    aspect-ratio: 5 / 1;
+    width: 100%;
+    max-width: 600px;
+    position: relative;
+    touch-action: none;
+  }
+  .sig-canvas-frame canvas { display: block; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
+  .sig-canvas-frame .placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #d0d4db;
+    font-style: italic;
+    pointer-events: none;
+    font-size: 14px;
+  }
+  .sig-canvas-frame.signed .placeholder { display: none; }
+  .sig-controls { display: flex; gap: 8px; }
+
+  .actions {
+    position: sticky;
+    bottom: 0;
+    background: var(--panel);
+    border-top: 2px solid var(--line);
+    padding: 12px 16px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 16px -16px 0;
+    z-index: 10;
+  }
+  button.btn {
+    border: 0;
+    border-radius: 4px;
+    padding: 10px 18px;
+    color: #fff;
+    font: 700 13px "Segoe UI", system-ui, sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    cursor: pointer;
+    min-height: 44px;
+  }
+  button.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.btn.primary { background: var(--accent); }
+  button.btn.primary:hover:not(:disabled) { background: var(--accent-hover); }
+  button.btn.orange { background: var(--orange); }
+  button.btn.green { background: var(--green); }
+  button.btn.slate { background: var(--slate); }
+  button.btn.ghost { background: transparent; color: var(--slate); border: 1px solid var(--line); }
+  button.btn.ghost:hover { background: #f7f8fa; }
+
+  .stepper-nav {
+    display: none;
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .stepper-nav button { flex: 1; min-height: 48px; }
+
+  .toast {
+    position: fixed;
+    top: 60px;
+    right: 16px;
+    background: var(--slate);
+    color: #fff;
+    padding: 12px 16px;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    z-index: 100;
+    max-width: 360px;
+    opacity: 0;
+    transform: translateY(-10px);
+    transition: opacity 0.2s, transform 0.2s;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.error { background: var(--error); }
+  .toast.success { background: var(--green); }
+
+  /* Modal for previous tickets list */
+  .modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 50;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+  .modal.open { display: flex; }
+  .modal .card {
+    background: #fff;
+    border-radius: 8px;
+    width: 100%;
+    max-width: 800px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+  }
+  .modal .card header { padding: 14px; border-bottom: 1px solid var(--line); display: flex; align-items: center; }
+  .modal .card header h3 { margin: 0; font-size: 15px; }
+  .modal .card header button { margin-left: auto; }
+  .modal .card .body { overflow-y: auto; padding: 0; }
+  table.tickets { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.tickets th, table.tickets td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--line); }
+  table.tickets th { background: #f8f9fb; font-weight: 600; color: var(--label); position: sticky; top: 0; }
+  table.tickets tbody tr { cursor: pointer; }
+  table.tickets tbody tr:hover { background: #f3f7ff; }
+  table.tickets td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* Mobile stepper takeover */
+  @media (max-width: 767px) {
+    main { padding: 8px; }
+    section.panel { display: none; }
+    section.panel.active-step { display: block; }
+    .row.cols-3, .row.cols-2 { grid-template-columns: 1fr; }
+    .stepper-bar { display: flex; }
+    .stepper-nav { display: flex; }
+    .actions { display: none; }
+    section.panel.last-step ~ .actions { display: flex; }
+    .sig-canvas-frame { aspect-ratio: 5 / 2; }
+    button.btn { min-height: 48px; font-size: 14px; }
+  }
+
+  /* When in mobile and the current step has the actions, show actions. */
+  @media (max-width: 767px) {
+    .actions.mobile-show { display: flex; }
+  }
+</style>
+</head>
+<body>
+
+<header class="app-bar">
+  <h1>WEIGHMASTER CERTIFICATE</h1>
+  <a href="/" class="back" id="backLink">Dashboard ›</a>
+  <span class="sub" id="modeLabel">New Ticket</span>
+</header>
+
+<div class="stepper-bar" id="stepperBar"></div>
+
+<main>
+
+  <!-- Step 1: Ticket header -->
+  <section class="panel" data-step="1" data-title="Ticket">
+    <h2>Ticket Header</h2>
+    <div class="row cols-2">
+      <label class="field">
+        <span class="lbl">Truck # *</span>
+        <input type="text" id="fTruck" autocomplete="off" inputmode="latin">
+      </label>
+      <label class="field">
+        <span class="lbl">Company / Hauler *</span>
+        <input type="text" id="fCustomer" list="dl-customers" autocomplete="off">
+        <datalist id="dl-customers"></datalist>
+      </label>
+    </div>
+    <div class="row cols-3">
+      <label class="field">
+        <span class="lbl">Weighmaster #</span>
+        <input type="text" id="fWeighmasterNumber" class="readonly" readonly>
+      </label>
+      <label class="field">
+        <span class="lbl">Invoice #</span>
+        <input type="text" id="fInvoiceNumber" class="readonly" readonly>
+      </label>
+      <label class="field">
+        <span class="lbl">Date</span>
+        <input type="date" id="fDate">
+      </label>
+    </div>
+    <label class="field">
+      <span class="lbl">Waste Data</span>
+      <input type="text" id="fWasteData">
+    </label>
+  </section>
+
+  <!-- Step 2: Weights -->
+  <section class="panel" data-step="2" data-title="Weights">
+    <h2>Weights &amp; Time</h2>
+    <div class="row cols-2">
+      <label class="field">
+        <span class="lbl">Time In</span>
+        <div class="time-input">
+          <input type="text" id="fTimeIn" placeholder="HH:mm" inputmode="numeric">
+          <button type="button" data-fill-time="in" title="Set to now">⏱</button>
+          <span class="badge in" style="align-self:center;">INBOUND</span>
+        </div>
+      </label>
+      <label class="field">
+        <span class="lbl">Time Out</span>
+        <div class="time-input">
+          <input type="text" id="fTimeOut" placeholder="HH:mm" inputmode="numeric">
+          <button type="button" data-fill-time="out" title="Set to now">⏱</button>
+          <span class="badge out" style="align-self:center;">OUTBOUND</span>
+        </div>
+      </label>
+    </div>
+    <div class="row cols-3">
+      <label class="field">
+        <span class="lbl">Inbound Weight (GROSS, lb)</span>
+        <input type="text" id="fGross" inputmode="decimal" class="numeric">
+      </label>
+      <label class="field">
+        <span class="lbl">Outbound Weight (TARE, lb)</span>
+        <input type="text" id="fTare" inputmode="decimal" class="numeric">
+      </label>
+      <label class="field">
+        <span class="lbl">Net Weight (lb)</span>
+        <input type="text" id="fNetLb" class="computed" readonly>
+      </label>
+    </div>
+    <label class="field">
+      <span class="lbl">Net Weight Tons</span>
+      <input type="text" id="fNetTons" class="computed" readonly>
+    </label>
+  </section>
+
+  <!-- Step 3: Product & pricing -->
+  <section class="panel" data-step="3" data-title="Pricing">
+    <h2>Product &amp; Payment</h2>
+    <label class="field">
+      <span class="lbl">Product Code *</span>
+      <input type="text" id="fProduct" list="dl-products" autocomplete="off">
+      <datalist id="dl-products"></datalist>
+    </label>
+    <div class="row cols-2">
+      <label class="field">
+        <span class="lbl">Amount $</span>
+        <input type="text" id="fAmount" inputmode="decimal" class="numeric">
+        <div class="expected-hint" id="expectedHint">Expected: --</div>
+      </label>
+      <div class="field">
+        <span class="lbl">Payment Method</span>
+        <div class="radios" id="paymentRadios">
+          <label><input type="radio" name="payment" value="CASH" checked> CASH</label>
+          <label><input type="radio" name="payment" value="CREDIT"> CREDIT</label>
+          <label><input type="radio" name="payment" value="DEBIT"> DEBIT</label>
+          <label><input type="radio" name="payment" value="AR"> AR</label>
+          <label><input type="radio" name="payment" value="EXPENSE"> EXPENSE</label>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Step 4: Location & notes -->
+  <section class="panel" data-step="4" data-title="Details">
+    <h2>Memo, Origin &amp; Notes</h2>
+    <label class="field">
+      <span class="lbl">Memo</span>
+      <input type="text" id="fMemo">
+    </label>
+    <div class="row cols-2">
+      <label class="field">
+        <span class="lbl">City</span>
+        <input type="text" id="fCity" list="dl-cities" autocomplete="off">
+        <datalist id="dl-cities"></datalist>
+      </label>
+      <label class="field">
+        <span class="lbl">Address (Waste Origin)</span>
+        <input type="text" id="fOrigin" list="dl-origins" autocomplete="off">
+        <datalist id="dl-origins"></datalist>
+      </label>
+    </div>
+    <label class="field">
+      <span class="lbl">Ticket Notes</span>
+      <textarea id="fNotes"></textarea>
+    </label>
+  </section>
+
+  <!-- Step 5: Signature & certs -->
+  <section class="panel last-step" data-step="5" data-title="Signature">
+    <h2>Signatures &amp; Certificates</h2>
+    <div class="row cols-2">
+      <label class="field">
+        <span class="lbl">Weighmaster Signature</span>
+        <input type="text" id="fWeighmasterSig">
+      </label>
+      <label class="field">
+        <span class="lbl">By</span>
+        <input type="text" id="fByPerson">
+      </label>
+    </div>
+    <div class="checks">
+      <label><input type="checkbox" id="fWeightCert"> Weight Certificate</label>
+      <label><input type="checkbox" id="fRecyclingCert"> Recycling C&amp;D Certificate</label>
+    </div>
+    <div class="sig-wrap" style="margin-top: 14px;">
+      <span class="lbl" style="color: var(--label); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">Driver Signature</span>
+      <div class="sig-canvas-frame" id="sigFrame">
+        <canvas id="sigCanvas"></canvas>
+        <div class="placeholder">Sign here</div>
+      </div>
+      <div class="sig-controls">
+        <button type="button" class="btn ghost" id="btnClearSig">Clear Signature</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="stepper-nav" id="stepperNav">
+    <button type="button" class="btn ghost" id="btnPrev">‹ Back</button>
+    <button type="button" class="btn primary" id="btnNext">Next ›</button>
+  </div>
+
+  <div class="actions" id="actionsBar">
+    <button type="button" class="btn primary" id="btnSave">Save Ticket</button>
+    <button type="button" class="btn orange" id="btnSavePrint">Save &amp; Print</button>
+    <button type="button" class="btn green" id="btnPrint" disabled>Print</button>
+    <button type="button" class="btn ghost" id="btnNew">New Ticket</button>
+    <button type="button" class="btn slate" id="btnPrev2" style="margin-left:auto;">Previous Tickets</button>
+  </div>
+
+</main>
+
+<div class="modal" id="recentModal">
+  <div class="card">
+    <header>
+      <h3>Previous Tickets</h3>
+      <button type="button" class="btn ghost" id="btnCloseRecent">Close</button>
+    </header>
+    <div class="body" id="recentBody">
+      <table class="tickets">
+        <thead><tr><th>Ticket #</th><th>Date</th><th>Customer</th><th>Truck</th><th>Product</th><th class="num">Tons</th><th class="num">Amount</th></tr></thead>
+        <tbody id="recentRows"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Hidden iframe used for printing. Loading the print URL here keeps the operator
+     on the ticket form (no popup, no popup-blocker headaches, no blank tab to close).
+     The endpoint's HTML auto-fires window.print() on load — we let that handle the
+     dialog, then re-trigger from the parent on stubborn browsers (Firefox sometimes
+     skips the embedded script's print call). -->
+<iframe id="printFrame" title="Ticket print"
+        style="position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;"
+        sandbox="allow-same-origin allow-scripts allow-modals"></iframe>
+
+<script src="/auth.js"></script>
+<script>
+'use strict';
+
+// ---------- state ----------
+const state = {
+  id: null,                     // null = new; set after first save (edit mode)
+  amountManuallyEdited: false,  // mirrors WinForms _amountManuallyEdited flag
+  settingAmountProgrammatic: false,
+  expectedRate: null,
+  signatureLine: 'Jesus Polanco',
+  currentStep: 1,
+  hasSignature: false,          // tracks whether user drew anything OR loaded a sig
+  signatureDirty: false,        // true only when the operator drew NEW strokes since
+                                // load — distinguishes "new ink to upload" from "the
+                                // stored signature is already shown on the canvas."
+  saveInFlight: false,          // double-click guard for Save / Save&Print
+  isMobile: () => window.matchMedia('(max-width: 767px)').matches,
+};
+
+const STEPS = Array.from(document.querySelectorAll('section.panel'));
+const TOTAL_STEPS = STEPS.length;
+
+// ---------- DOM helpers ----------
+const $ = id => document.getElementById(id);
+const toast = (msg, kind = '') => {
+  const el = $('toast');
+  el.textContent = msg;
+  el.className = 'toast show ' + kind;
+  setTimeout(() => { el.className = 'toast ' + kind; }, 2400);
+};
+
+// ---------- field bindings ----------
+const f = {
+  truck: $('fTruck'),
+  customer: $('fCustomer'),
+  weighmasterNumber: $('fWeighmasterNumber'),
+  invoiceNumber: $('fInvoiceNumber'),
+  date: $('fDate'),
+  wasteData: $('fWasteData'),
+  timeIn: $('fTimeIn'),
+  timeOut: $('fTimeOut'),
+  gross: $('fGross'),
+  tare: $('fTare'),
+  netLb: $('fNetLb'),
+  netTons: $('fNetTons'),
+  product: $('fProduct'),
+  amount: $('fAmount'),
+  memo: $('fMemo'),
+  city: $('fCity'),
+  origin: $('fOrigin'),
+  notes: $('fNotes'),
+  weighmasterSig: $('fWeighmasterSig'),
+  byPerson: $('fByPerson'),
+  weightCert: $('fWeightCert'),
+  recyclingCert: $('fRecyclingCert'),
+};
+
+function readPayment() {
+  const el = document.querySelector('input[name=payment]:checked');
+  return el ? el.value : 'CASH';
+}
+function setPayment(val) {
+  const el = document.querySelector(`input[name=payment][value=${val}]`);
+  if (el) el.checked = true;
+}
+// Maps a pricing rule's account_type to a payment radio value. "Account" is the
+// legacy spelling of AR. "Regular" (or unknown) returns null = no auto-select.
+function accountTypeToPayment(at) {
+  switch ((at || '').toUpperCase()) {
+    case 'ACCOUNT':
+    case 'AR':      return 'AR';
+    case 'CASH':    return 'CASH';
+    case 'CREDIT':  return 'CREDIT';
+    case 'DEBIT':   return 'DEBIT';
+    case 'EXPENSE': return 'EXPENSE';
+    default:        return null;
+  }
+}
+
+function parseNumber(text) {
+  if (text == null || text === '') return null;
+  const cleaned = String(text).replace(/[$,]/g, '').trim();
+  const n = parseFloat(cleaned);
+  return Number.isFinite(n) ? n : null;
+}
+
+function fmtNum(n, digits = 0) {
+  if (n == null) return '';
+  return new Intl.NumberFormat('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(n);
+}
+function fmtMoney(n) {
+  if (n == null) return '';
+  return n.toFixed(2);
+}
+
+// ---------- truck → tare auto-fill ----------
+// Looks up the truck in the registry and prefills outbound weight if the
+// operator hasn't already entered one. Time-out also auto-fills if blank,
+// matching the VBA txtTruckNumber_Change behavior.
+let lastTareLookup = '';
+async function autofillTareFromTruck() {
+  const truck = (f.truck.value || '').trim();
+  if (!truck) return;
+  if (truck === lastTareLookup) return; // already looked this one up
+  lastTareLookup = truck;
+
+  // Don't overwrite an operator-entered tare.
+  if (f.tare.value && f.tare.value.trim() !== '') return;
+
+  try {
+    const res = await fetch(`/api/trucks/lookup?truckId=${encodeURIComponent(truck)}`);
+    if (!res.ok) return; // 404 = no tare on file, silently skip
+    const data = await res.json();
+    if (data.tareWeight == null) return;
+
+    f.tare.value = String(Math.round(data.tareWeight));
+    if (!f.timeOut.value) f.timeOut.value = nowHHmm();
+    recalcNet();
+    schedulePricingLookup();
+  } catch {
+    // Network error — operator can still type the tare manually.
+  }
+}
+
+// ---------- computed: net + tons ----------
+function recalcNet() {
+  const g = parseNumber(f.gross.value);
+  const t = parseNumber(f.tare.value);
+  if (g == null || t == null) {
+    f.netLb.value = '';
+    f.netTons.value = '';
+    return null;
+  }
+  const net = Math.abs(g - t);
+  f.netLb.value = fmtNum(net);
+  f.netTons.value = (net / 2000).toFixed(2);
+  return net;
+}
+
+// ---------- amount programmatic write ----------
+function setAmountProgrammatic(value) {
+  state.settingAmountProgrammatic = true;
+  try { f.amount.value = value; }
+  finally { state.settingAmountProgrammatic = false; }
+}
+
+// ---------- pricing debounce ----------
+let pricingTimer = null;
+function schedulePricingLookup() {
+  if (pricingTimer) clearTimeout(pricingTimer);
+  pricingTimer = setTimeout(runPricingLookup, 250);
+}
+
+async function runPricingLookup() {
+  const params = new URLSearchParams();
+  if (f.customer.value) params.set('customer', f.customer.value);
+  if (f.product.value) params.set('product', f.product.value);
+  if (f.date.value) params.set('date', f.date.value);
+  const tonsText = f.netTons.value;
+  const tons = parseNumber(tonsText);
+  if (tons != null) params.set('tons', tons);
+
+  if (!f.product.value) {
+    $('expectedHint').className = 'expected-hint';
+    $('expectedHint').textContent = 'Expected: select product';
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/pricing?' + params.toString());
+    const data = await res.json();
+    if (data.expected != null) {
+      $('expectedHint').className = 'expected-hint found';
+      $('expectedHint').textContent = 'Expected: ' + data.status;
+      state.expectedRate = data.rate;
+      if (!state.amountManuallyEdited) {
+        setAmountProgrammatic(data.expected.toFixed(2));
+      }
+    } else if (data.rate != null) {
+      $('expectedHint').className = 'expected-hint found';
+      $('expectedHint').textContent = 'Expected: ' + data.status;
+      state.expectedRate = data.rate;
+    } else {
+      $('expectedHint').className = 'expected-hint miss';
+      $('expectedHint').textContent = 'Expected: ' + (data.status || 'no price found');
+      state.expectedRate = null;
+    }
+    // The matched pricing rule's account_type carries the default payment method.
+    // Auto-select that radio; the operator can still change it before saving.
+    const rulePayment = accountTypeToPayment(data.accountType);
+    if (rulePayment) setPayment(rulePayment);
+  } catch (err) {
+    $('expectedHint').className = 'expected-hint';
+    $('expectedHint').textContent = 'Expected: --';
+  }
+}
+
+// ---------- field wiring ----------
+function wireEvents() {
+  // Net + tons recompute on gross/tare; also auto-fill time-in/out if blank.
+  f.gross.addEventListener('input', () => {
+    if (f.gross.value && !f.timeIn.value) f.timeIn.value = nowHHmm();
+    recalcNet();
+    schedulePricingLookup();
+  });
+  f.tare.addEventListener('input', () => {
+    if (f.tare.value && !f.timeOut.value) f.timeOut.value = nowHHmm();
+    recalcNet();
+    schedulePricingLookup();
+  });
+  f.customer.addEventListener('input', schedulePricingLookup);
+  f.product.addEventListener('input', schedulePricingLookup);
+  f.date.addEventListener('input', schedulePricingLookup);
+
+  // Truck → tare auto-fill: lookup the truck on blur (so we don't fire on every
+  // keystroke) and prefill Outbound Weight from the registry. Skipped if the
+  // operator already typed a tare value — manual entries always win.
+  f.truck.addEventListener('blur', autofillTareFromTruck);
+  f.truck.addEventListener('change', autofillTareFromTruck);
+
+  // Track manual amount edits — same flag as WinForms _amountManuallyEdited.
+  f.amount.addEventListener('input', () => {
+    if (!state.settingAmountProgrammatic) state.amountManuallyEdited = true;
+  });
+
+  document.querySelectorAll('[data-fill-time]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const which = btn.getAttribute('data-fill-time');
+      (which === 'in' ? f.timeIn : f.timeOut).value = nowHHmm();
+    });
+  });
+
+  $('btnSave').addEventListener('click', () => saveTicket(false));
+  $('btnSavePrint').addEventListener('click', () => saveTicket(true));
+  $('btnPrint').addEventListener('click', () => {
+    if (state.id) printTicket(state.id);
+  });
+  $('btnNew').addEventListener('click', clearForm);
+  $('btnPrev2').addEventListener('click', openRecent);
+  $('btnCloseRecent').addEventListener('click', () => $('recentModal').classList.remove('open'));
+  $('btnClearSig').addEventListener('click', clearSignature);
+  $('btnPrev').addEventListener('click', () => goStep(state.currentStep - 1));
+  $('btnNext').addEventListener('click', () => {
+    if (state.currentStep < TOTAL_STEPS) goStep(state.currentStep + 1);
+    else saveTicket(false);
+  });
+
+  window.addEventListener('resize', updateLayoutForBreakpoint);
+}
+
+function nowHHmm() {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+
+// ---------- dropdowns ----------
+async function loadDropdowns() {
+  try {
+    const res = await fetch('/api/dropdowns');
+    const data = await res.json();
+    fillDatalist('dl-customers', data.customers);
+    fillDatalist('dl-products', data.products);
+    fillDatalist('dl-cities', data.cities);
+    fillDatalist('dl-origins', data.origins);
+  } catch { /* first run; no data */ }
+}
+function fillDatalist(id, items) {
+  const dl = $(id);
+  if (!dl || !items) return;
+  dl.innerHTML = items.map(v => `<option value="${escapeHtml(v)}"></option>`).join('');
+}
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// ---------- defaults ----------
+async function loadDefaults() {
+  const res = await fetch('/api/ticket/defaults');
+  const d = await res.json();
+  f.weighmasterNumber.value = d.weighmasterNumber || '';
+  f.invoiceNumber.value = d.invoiceNumber || '';
+  if (!f.date.value) f.date.value = d.date;
+  state.signatureLine = d.signatureLine || 'Jesus Polanco';
+  if (!f.byPerson.value) f.byPerson.value = state.signatureLine;
+}
+
+// ---------- save / load ----------
+function buildRequest() {
+  return {
+    weighmasterNumber: f.weighmasterNumber.value || null,
+    invoiceNumber: f.invoiceNumber.value || null,
+    date: f.date.value || null,
+    truck: f.truck.value || null,
+    customer: f.customer.value || null,
+    product: f.product.value || null,
+    city: f.city.value || null,
+    origin: f.origin.value || null,
+    wasteData: f.wasteData.value || null,
+    memo: f.memo.value || null,
+    notes: f.notes.value || null,
+    timeIn: f.timeIn.value || null,
+    timeOut: f.timeOut.value || null,
+    gross: parseNumber(f.gross.value),
+    tare: parseNumber(f.tare.value),
+    amount: parseNumber(f.amount.value),
+    payment: readPayment(),
+    weighmaster: f.weighmasterSig.value || null,
+    byPerson: f.byPerson.value || null,
+    weightCertificate: f.weightCert.checked,
+    recyclingCdCertificate: f.recyclingCert.checked,
+    // Signature is sent with the main save now — atomic on the DB side.
+    driverSignaturePngBase64: state.hasSignature && state.signatureDirty ? canvasToPngBase64() : null,
+  };
+}
+
+async function saveTicket(thenPrint) {
+  if (state.saveInFlight) return; // double-click guard
+  if (!f.truck.value.trim()) { toast('Truck # is required', 'error'); return; }
+  if (!f.customer.value.trim()) { toast('Company / hauler is required', 'error'); return; }
+
+  state.saveInFlight = true;
+  const saveButtons = [$('btnSave'), $('btnSavePrint')];
+  saveButtons.forEach(b => b.disabled = true);
+
+  try {
+    const payload = buildRequest();
+    const url = state.id ? `/api/ticket/${state.id}` : '/api/tickets';
+    const method = state.id ? 'PUT' : 'POST';
+
+    let saved;
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: `Save failed (HTTP ${res.status})` }));
+        toast(err.error || 'Save failed', 'error');
+        return;
+      }
+      saved = await res.json();
+    } catch (err) {
+      toast('Network error during save — is the dashboard running?', 'error');
+      return;
+    }
+
+    state.id = saved.id;
+    f.weighmasterNumber.value = saved.weighmasterNumber;
+    f.invoiceNumber.value = saved.invoiceNumber;
+    // Sync the radio button to whatever the server resolved (Account customers get
+    // forced to AR by BuildEntry; this keeps the UI honest).
+    if (saved.payment) setPayment(saved.payment);
+    $('modeLabel').textContent = `Editing #${saved.weighmasterNumber} (id=${saved.id})`;
+    $('btnPrint').disabled = false;
+    state.signatureDirty = false; // PNG was sent with this save
+
+    toast(`Saved ticket #${saved.weighmasterNumber}`, 'success');
+
+    if (thenPrint) {
+      printTicket(state.id);
+    }
+  } finally {
+    state.saveInFlight = false;
+    saveButtons.forEach(b => b.disabled = false);
+  }
+}
+
+async function loadTicket(id) {
+  const res = await fetch('/api/ticket/' + id);
+  if (!res.ok) { toast('Ticket not found', 'error'); return; }
+  const t = await res.json();
+  state.id = id;
+  f.weighmasterNumber.value = t.weighmasterNumber || '';
+  f.invoiceNumber.value = t.invoiceNumber || t.documentNumber || '';
+  f.date.value = (t.transactionDate || '').slice(0, 10);
+  f.truck.value = t.truckId || '';
+  f.customer.value = t.customer || '';
+  f.wasteData.value = t.wasteData || '';
+  f.notes.value = t.ticketNotes || '';
+  f.timeIn.value = t.timeIn || '';
+  f.timeOut.value = t.timeOut || '';
+  f.gross.value = t.t1 != null ? Math.round(t.t1) : '';
+  f.tare.value = t.t2 != null ? Math.round(t.t2) : '';
+  f.memo.value = t.memo || '';
+  f.city.value = t.city || '';
+  f.origin.value = t.origin || '';
+  f.product.value = t.productService || '';
+  // Match WinForms behavior: a loaded ticket starts "not manually edited" so that
+  // changing customer/product/date will recompute the amount from pricing. The flag
+  // is set only by subsequent direct edits via the input handler.
+  state.amountManuallyEdited = false;
+  setAmountProgrammatic(t.amount != null ? Number(t.amount).toFixed(2) : '');
+  f.weighmasterSig.value = t.weighmaster || '';
+  f.byPerson.value = t.byPerson || state.signatureLine;
+  f.weightCert.checked = !!t.weightCertificate;
+  f.recyclingCert.checked = !!t.recyclingCdCertificate;
+  setPayment((t.payment || 'CASH').toUpperCase());
+  recalcNet();
+  schedulePricingLookup();
+  $('btnPrint').disabled = false;
+  $('modeLabel').textContent = `Editing #${t.weighmasterNumber || ''} (id=${id})`;
+
+  // Repaint the stored signature so the operator can see what's on file. The
+  // signatureDirty flag stays false — buildRequest() will skip resending the PNG
+  // unless they draw new ink, avoiding pointless BLOB writes on every edit-save.
+  if (t.hasDriverSignature) {
+    state.hasSignature = true;
+    state.signatureDirty = false;
+    $('sigFrame').classList.add('signed');
+    SigPad.loadFromUrl('/api/ticket/' + id + '/signature.png?ts=' + Date.now());
+  } else {
+    state.hasSignature = false;
+    state.signatureDirty = false;
+    SigPad.clear();
+  }
+}
+
+// Print via a hidden iframe rather than a popup tab. The print endpoint already
+// auto-fires window.print() on load; we also re-fire from the parent after load
+// so browsers that block scripted-print-from-script (Firefox in some configs)
+// still get the dialog. Cache-bust the URL so re-prints of the same id pick up
+// the latest signature / edits without browser caching getting in the way.
+function printTicket(id) {
+  const frame = document.getElementById('printFrame');
+  if (!frame) {
+    // Fallback: if for some reason the iframe was removed, open in a new tab.
+    window.open('/api/ticket/' + id + '/print', '_blank');
+    return;
+  }
+  const url = '/api/ticket/' + id + '/print?ts=' + Date.now();
+  frame.onload = () => {
+    try {
+      // setTimeout gives the embedded auto-print a chance first; if it succeeded
+      // (Chrome / Edge), this second call is a no-op because the dialog is already
+      // up. If the embedded call was blocked, this parent-initiated print() works.
+      setTimeout(() => {
+        try { frame.contentWindow.focus(); } catch {}
+        try { frame.contentWindow.print(); } catch (e) { /* dialog already open */ }
+      }, 150);
+    } catch (e) {
+      toast('Could not open print dialog — try the browser menu', 'error');
+    }
+  };
+  frame.src = url;
+}
+
+function clearForm() {
+  state.id = null;
+  state.amountManuallyEdited = false;
+  state.hasSignature = false;
+  state.signatureDirty = false;
+  for (const key in f) {
+    const el = f[key];
+    if (el.type === 'checkbox') el.checked = false;
+    else if (!el.readOnly) el.value = '';
+  }
+  setPayment('CASH');
+  f.date.valueAsDate = new Date();
+  $('expectedHint').textContent = 'Expected: --';
+  $('expectedHint').className = 'expected-hint';
+  $('modeLabel').textContent = 'New Ticket';
+  $('btnPrint').disabled = true;
+  clearSignature();
+  loadDefaults();
+  goStep(1);
+  f.truck.focus();
+}
+
+// ---------- previous tickets modal ----------
+async function openRecent() {
+  $('recentModal').classList.add('open');
+  $('recentRows').innerHTML = '<tr><td colspan="7" style="text-align:center;color:#888;padding:20px;">Loading…</td></tr>';
+  const res = await fetch('/api/tickets/recent?limit=100');
+  const rows = await res.json();
+  $('recentRows').innerHTML = rows.map(r => `
+    <tr data-id="${r.id}">
+      <td>${escapeHtml(r.docNo || '')}</td>
+      <td>${escapeHtml((r.date || '').slice(0, 10))}</td>
+      <td>${escapeHtml(r.customer || '')}</td>
+      <td>${escapeHtml(r.truck || '')}</td>
+      <td>${escapeHtml(r.product || '')}</td>
+      <td class="num">${r.qty != null ? Number(r.qty).toFixed(2) : ''}</td>
+      <td class="num">${r.amount != null ? fmtMoney(Number(r.amount)) : ''}</td>
+    </tr>`).join('');
+  document.querySelectorAll('#recentRows tr').forEach(tr => {
+    tr.addEventListener('click', () => {
+      $('recentModal').classList.remove('open');
+      loadTicket(Number(tr.getAttribute('data-id')));
+    });
+  });
+}
+
+// ---------- signature canvas ----------
+const SigPad = (() => {
+  const canvas = $('sigCanvas');
+  const frame = $('sigFrame');
+  const ctx = canvas.getContext('2d');
+  let drawing = false;
+  let last = null;
+
+  function resize() {
+    const rect = frame.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const prev = canvas.width && canvas.height ? captureBitmap() : null;
+    canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+    canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#111';
+    if (prev) ctx.drawImage(prev, 0, 0, rect.width, rect.height);
+  }
+  function captureBitmap() {
+    const c2 = document.createElement('canvas');
+    c2.width = canvas.width;
+    c2.height = canvas.height;
+    c2.getContext('2d').drawImage(canvas, 0, 0);
+    return c2;
+  }
+
+  function pos(e) {
+    const rect = canvas.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }
+  function start(e) {
+    e.preventDefault();
+    drawing = true;
+    state.hasSignature = true;
+    state.signatureDirty = true; // new strokes since last load/save → needs upload
+    frame.classList.add('signed');
+    last = pos(e);
+  }
+  function move(e) {
+    if (!drawing) return;
+    e.preventDefault();
+    const p = pos(e);
+    ctx.beginPath();
+    ctx.moveTo(last.x, last.y);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+    last = p;
+  }
+  function end(e) {
+    if (!drawing) return;
+    e.preventDefault();
+    drawing = false;
+  }
+
+  canvas.addEventListener('pointerdown', start);
+  canvas.addEventListener('pointermove', move);
+  canvas.addEventListener('pointerup', end);
+  canvas.addEventListener('pointercancel', end);
+  canvas.addEventListener('pointerleave', end);
+
+  return {
+    resize,
+    clear() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      state.hasSignature = false;
+      state.signatureDirty = true; // clear is an intentional change → save it
+      frame.classList.remove('signed');
+    },
+    loadFromUrl(url) {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        const rect = canvas.getBoundingClientRect();
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, rect.width, rect.height);
+      };
+      img.onerror = () => { /* leave canvas blank if the BLOB isn't there */ };
+      img.src = url;
+    },
+    toPng() {
+      if (!state.hasSignature) return null;
+      // Re-render onto a white background so the PNG isn't transparent (printers
+      // and the WinForms BLOB-loader both handle it cleaner that way).
+      const out = document.createElement('canvas');
+      out.width = canvas.width;
+      out.height = canvas.height;
+      const oc = out.getContext('2d');
+      oc.fillStyle = '#fff';
+      oc.fillRect(0, 0, out.width, out.height);
+      oc.drawImage(canvas, 0, 0);
+      return out.toDataURL('image/png');
+    }
+  };
+})();
+function clearSignature() { SigPad.clear(); }
+function canvasToPngBase64() { return SigPad.toPng(); }
+
+// ---------- stepper ----------
+function buildStepperBar() {
+  const bar = $('stepperBar');
+  bar.innerHTML = STEPS.map(s => {
+    const n = s.getAttribute('data-step');
+    const title = s.getAttribute('data-title');
+    return `<div class="pip" data-go="${n}">${n}. ${title}</div>`;
+  }).join('');
+  bar.querySelectorAll('.pip').forEach(p => p.addEventListener('click', () => goStep(Number(p.getAttribute('data-go')))));
+}
+function goStep(n) {
+  n = Math.max(1, Math.min(TOTAL_STEPS, n));
+  state.currentStep = n;
+  STEPS.forEach(s => s.classList.toggle('active-step', Number(s.getAttribute('data-step')) === n));
+  const pips = document.querySelectorAll('.stepper-bar .pip');
+  pips.forEach((p, i) => {
+    p.classList.toggle('active', i + 1 === n);
+    p.classList.toggle('done', i + 1 < n);
+  });
+  $('btnPrev').disabled = n === 1;
+  $('btnNext').textContent = n === TOTAL_STEPS ? 'Save ✓' : 'Next ›';
+  updateLayoutForBreakpoint();
+}
+function updateLayoutForBreakpoint() {
+  // On mobile last-step, swap the stepper-nav for the actions bar.
+  const onLast = state.currentStep === TOTAL_STEPS;
+  if (state.isMobile()) {
+    $('actionsBar').classList.toggle('mobile-show', onLast);
+    $('stepperNav').style.display = onLast ? 'none' : 'flex';
+  } else {
+    $('actionsBar').classList.remove('mobile-show');
+    $('stepperNav').style.display = 'none';
+  }
+  SigPad.resize();
+}
+
+// ---------- init ----------
+async function init() {
+  buildStepperBar();
+  wireEvents();
+  goStep(1);
+  await loadDefaults();
+  await loadDropdowns();
+  f.date.valueAsDate = new Date();
+  SigPad.resize();
+
+  // If URL has ?id=, load that ticket.
+  const params = new URLSearchParams(location.search);
+  if (params.get('id')) loadTicket(Number(params.get('id')));
+}
+init();
+</script>
+</body>
+</html>

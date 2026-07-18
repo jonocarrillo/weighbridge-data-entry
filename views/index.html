@@ -1,0 +1,741 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AIS Dashboard</title>
+  <style>
+    :root {
+      --bg: #f5f7fa;
+      --panel: #fff;
+      --line: #d9e1ea;
+      --text: #182230;
+      --muted: #667085;
+      --green: #0f7f3f;
+      --yellow: #f1cf24;
+      --blue: #175cd3;
+      --red: #b42318;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; color: var(--text); background: var(--bg); }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 14px 22px; background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
+    h1 { font-size: 18px; margin: 0; }
+    .muted { color: var(--muted); font-size: 12px; }
+    .brand { display: flex; align-items: center; gap: 14px; }
+    .brand img { width: 172px; height: 52px; object-fit: contain; object-position: left center; }
+    .controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+    input, select, button { height: 34px; border: 1px solid var(--line); border-radius: 6px; padding: 0 10px; background: #fff; font: inherit; font-size: 13px; }
+    button { background: var(--green); border-color: var(--green); color: #fff; font-weight: 700; cursor: pointer; }
+    main { padding: 18px 22px 28px; max-width: 1500px; margin: 0 auto; }
+    .kpis { display: grid; grid-template-columns: repeat(5, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 1px 2px rgba(16,24,40,.06); }
+    .kpi { padding: 16px; }
+    .label { color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-size: 11px; font-weight: 700; }
+    .value { font-size: 26px; font-weight: 800; margin-top: 8px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+    .section { padding: 14px; }
+    .section h2 { margin: 0 0 12px; font-size: 15px; }
+    .bar-row { display: grid; grid-template-columns: minmax(120px, 220px) 1fr 110px; gap: 10px; align-items: center; margin: 9px 0; font-size: 13px; }
+    .bar-label { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .track { height: 12px; background: #edf2f7; border-radius: 999px; overflow: hidden; }
+    .fill { height: 100%; background: var(--green); border-radius: 999px; min-width: 2px; }
+    .fill.blue { background: var(--blue); }
+    .fill.yellow { background: var(--yellow); }
+    .table-toolbar { display: flex; justify-content: space-between; align-items: center; padding: 14px; border-bottom: 1px solid var(--line); }
+    .table-wrap { overflow: auto; max-height: 560px; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+    th { position: sticky; top: 0; background: #f8fafc; color: #475467; text-transform: uppercase; font-size: 11px; letter-spacing: .04em; }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .badge { display: inline-block; padding: 2px 7px; border-radius: 999px; font-size: 11px; font-weight: 700; background: #e8f3ee; color: var(--green); }
+    .badge.ar { background: #fef3f2; color: var(--red); }
+    .error { display: none; margin-bottom: 16px; padding: 12px; border-radius: 8px; background: #fff4f3; border: 1px solid #fecdca; color: var(--red); }
+    @media (max-width: 1000px) { header { flex-direction: column; align-items: flex-start; } .kpis { grid-template-columns: repeat(2, minmax(150px, 1fr)); } .grid { grid-template-columns: 1fr; } }
+
+    /* Day panel — replicates the Excel TODAY block */
+    .day-panel { padding: 16px 18px; margin-bottom: 16px; }
+    .day-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+    .day-head h2 { margin: 0; font-size: 18px; }
+    .day-head .day-meta { color: var(--muted); font-size: 12px; }
+    .day-head input[type="date"] { height: 32px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; font: inherit; font-size: 13px; }
+    .day-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; }
+    .day-stats table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .day-stats th, .day-stats td { padding: 8px 10px; border-bottom: 1px solid var(--line); }
+    .day-stats th { background: #f8fafc; color: #475467; text-transform: uppercase; font-size: 11px; letter-spacing: .04em; text-align: center; }
+    .day-stats td.row-label { font-weight: 700; color: #344054; text-transform: uppercase; letter-spacing: .04em; font-size: 11px; }
+    .day-stats td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .day-stats .pos { color: var(--green); }
+    .day-stats .neg { color: var(--red); }
+    .day-stats tr.divider td { border-top: 2px solid var(--line); }
+    .wcsg-card { padding: 18px; display: flex; flex-direction: column; gap: 6px; background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%); color: #fff; border-radius: 10px; }
+    .wcsg-card .label { color: rgba(255,255,255,.85); font-size: 12px; letter-spacing: .08em; }
+    .wcsg-card .value { font-size: 56px; font-weight: 800; line-height: 1; }
+    .wcsg-card .sub { color: rgba(255,255,255,.85); font-size: 13px; }
+    .wcsg-split { display: flex; gap: 18px; margin-top: 8px; }
+    .wcsg-split div { flex: 1; }
+    .wcsg-split .n { font-size: 22px; font-weight: 700; }
+    @media (max-width: 800px) { .day-grid { grid-template-columns: 1fr; } }
+    /* --- Inline editors (day rows / highlight customer) --- */
+    .mini-edit-btn { margin-top: 8px; align-self: flex-start; padding: 4px 10px; border-radius: 6px; border: 1px solid #c9d2df; background: #fff; color: #5a6577; font-size: 12px; cursor: pointer; }
+    .mini-edit-btn:hover { border-color: #f58220; color: #f58220; }
+    .wcsg-card { position: relative; }
+    .mini-edit-btn.hl { position: absolute; top: 10px; right: 10px; margin: 0; background: rgba(255,255,255,.15); border-color: rgba(255,255,255,.4); color: #fff; }
+    .mini-edit-btn.hl:hover { background: rgba(255,255,255,.3); color: #fff; }
+    .mini-editor { margin-top: 8px; padding: 10px; border: 1px dashed #c9d2df; border-radius: 8px; background: #f6f8fb; }
+    .mini-editor .mini-row { display: flex; justify-content: space-between; align-items: center; padding: 3px 0; font-size: 13px; }
+    .mini-x { border: none; background: none; color: #b3bac6; cursor: pointer; font-size: 13px; }
+    .mini-x:hover { color: #d33; }
+    .mini-editor-add { display: flex; gap: 8px; margin-top: 8px; }
+    .mini-editor-add select, .hl-editor select { flex: 1; padding: 6px 8px; border: 1px solid #c9d2df; border-radius: 6px; color: #1d2733; }
+    .mini-editor-add button, .hl-editor button { padding: 6px 12px; border-radius: 6px; border: 1px solid #f58220; background: #f58220; color: #fff; font-weight: 700; cursor: pointer; }
+    .hl-editor { gap: 8px; margin-top: 8px; }
+    /* --- Clickable chart bars --- */
+    .bar-row { cursor: pointer; }
+    .bar-row:hover .bar-label { color: #f58220; }
+    /* --- Editable ticket rows --- */
+    tr.ticket-row { cursor: pointer; }
+    tr.ticket-row:hover td { background: #f2f6fd; }
+    a.edit-link { color: #f58220; font-weight: 700; font-size: 12px; text-decoration: none; }
+    a.edit-link:hover { text-decoration: underline; }
+    /* --- My Trackers (user-defined cards) --- */
+    .tracker-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin-top: 10px; }
+    .tracker-card { position: relative; border: 1px solid #e3e7ee; border-radius: 10px; padding: 12px 14px; background: #fbfcfe; }
+    .tracker-card .t-title { font-size: 12px; font-weight: 700; color: #5a6577; text-transform: uppercase; letter-spacing: .08em; padding-right: 18px; }
+    .tracker-card .t-value { font-size: 26px; font-weight: 800; color: #1d2733; margin-top: 4px; }
+    .tracker-card .t-sub { font-size: 11px; color: #8a93a3; margin-top: 2px; }
+    .t-controls { position: absolute; top: 6px; right: 8px; display: flex; gap: 6px; }
+    .t-controls button { border: none; background: none; color: #b3bac6; font-size: 14px; cursor: pointer; line-height: 1; padding: 2px; }
+    .t-controls .t-del:hover { color: #d33; }
+    .t-controls .t-edit:hover { color: #f58220; }
+    .tracker-card { cursor: grab; }
+    .tracker-card.dragging { opacity: .45; cursor: grabbing; }
+    .tracker-card.drop-target { outline: 2px dashed #f58220; outline-offset: 2px; }
+    .tracker-card.hl .t-controls button { color: rgba(255,255,255,.55); }
+    .tracker-card.hl .t-controls button:hover { color: #fff; }
+    /* Highlight variant - same look as the WC S&G card */
+    .tracker-card.hl { border: none; background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%); color: #fff; padding: 18px; }
+    .tracker-card.hl .t-title { color: rgba(255,255,255,.85); }
+    .tracker-card.hl .t-value { color: #fff; font-size: 44px; line-height: 1; margin-top: 8px; }
+    .tracker-card.hl .t-sub { color: rgba(255,255,255,.85); font-size: 13px; margin-top: 6px; }
+    .tracker-card.hl .t-del { color: rgba(255,255,255,.55); }
+    .tracker-card.hl .t-del:hover { color: #fff; }
+    .t-split { display: flex; gap: 16px; margin-top: 10px; }
+    .t-split div { flex: 1; }
+    .t-split .t-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; opacity: .85; }
+    .t-split .t-n { font-size: 20px; font-weight: 700; }
+    /* Summary-table variant - full review like the Today card */
+    .tracker-card.tbl { grid-column: span 2; }
+    .tracker-card.wide { grid-column: 1 / -1; }
+    .t-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
+    .t-table th { text-align: right; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: #8a93a3; font-weight: 700; padding: 4px 8px; }
+    .t-table th:first-child { text-align: left; }
+    .t-table td { padding: 5px 8px; border-top: 1px solid #eef1f6; text-align: right; }
+    .t-table td.row-lbl { text-align: left; font-weight: 700; color: #5a6577; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+    .t-table td.pos { color: #15803d; }
+    .t-table td.neg { color: #b91c1c; }
+    .t-bars { margin-top: 8px; }
+    .t-list-wrap { overflow: auto; max-height: 480px; margin-top: 8px; }
+    .t-list { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .t-list th, .t-list td { padding: 7px 8px; border-bottom: 1px solid #eef1f6; text-align: left; white-space: nowrap; }
+    .t-list th { position: sticky; top: 0; background: #f8fafc; color: #475467; text-transform: uppercase; font-size: 10px; letter-spacing: .04em; }
+    .t-list td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .t-list tr.ticket-row { cursor: pointer; }
+    .t-list tr.ticket-row:hover td { background: #f2f6fd; }
+    @media (max-width: 700px) {
+      .tracker-card.tbl, .tracker-card.wide { grid-column: span 1; }
+    }
+    .tracker-builder { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-top: 10px; padding: 12px; border: 1px dashed #c9d2df; border-radius: 10px; background: #f6f8fb; }
+    .tracker-builder select, .tracker-builder input { padding: 7px 9px; border: 1px solid #c9d2df; border-radius: 6px; font-size: 13px; }
+    .tracker-builder button { padding: 7px 12px; border-radius: 6px; border: 1px solid #f58220; background: #f58220; color: #fff; font-weight: 700; cursor: pointer; }
+    .tracker-builder button.ghost { background: #fff; color: #5a6577; border-color: #c9d2df; }
+    .tracker-add { padding: 5px 12px; border-radius: 6px; border: 1px solid #f58220; background: #fff; color: #f58220; font-weight: 700; font-size: 12px; cursor: pointer; }
+    .tracker-add:hover { background: #f58220; color: #fff; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <img src="/ais.png" alt="American Industrial Services">
+      <div>
+        <h1>Local Operations Dashboard</h1>
+        <div class="muted" id="status">Reading quickbooks.db...</div>
+      </div>
+    </div>
+    <div class="controls">
+      <a href="/ticket.html" id="newTicketBtn" style="display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 14px;background:#f58220;color:#fff;border-radius:6px;font-weight:700;font-size:13px;text-decoration:none;border:1px solid #f58220;">+ New Ticket</a>
+      <a href="/pricing.html" style="display:inline-flex;align-items:center;height:34px;padding:0 12px;background:#465f82;color:#fff;border-radius:6px;font-weight:600;font-size:13px;text-decoration:none;border:1px solid #465f82;">Pricing</a>
+      <a href="/trucks.html" style="display:inline-flex;align-items:center;height:34px;padding:0 12px;background:#465f82;color:#fff;border-radius:6px;font-weight:600;font-size:13px;text-decoration:none;border:1px solid #465f82;">Trucks</a>
+      <a href="/billing.html" style="display:inline-flex;align-items:center;height:34px;padding:0 12px;background:#465f82;color:#fff;border-radius:6px;font-weight:600;font-size:13px;text-decoration:none;border:1px solid #465f82;">AR Billing</a>
+      <a href="/email.html" style="display:inline-flex;align-items:center;height:34px;padding:0 12px;background:#465f82;color:#fff;border-radius:6px;font-weight:600;font-size:13px;text-decoration:none;border:1px solid #465f82;">Email Export</a>
+      <input id="fromDate" type="date">
+      <input id="toDate" type="date">
+      <select id="paymentFilter"><option value="">All Payments</option></select>
+      <input id="searchBox" type="search" placeholder="Search customer, ticket, product">
+      <button id="refreshBtn">Refresh</button>
+    </div>
+  </header>
+  <main>
+    <div class="error" id="errorBox"></div>
+
+    <section class="kpis">
+      <div class="card kpi"><div class="label">Total Amount</div><div class="value" id="kpiAmount">$0.00</div><div class="muted">Filtered tickets</div></div>
+      <div class="card kpi"><div class="label">AR Total</div><div class="value" id="kpiAr">$0.00</div><div class="muted">Account tickets</div></div>
+      <div class="card kpi"><div class="label">Total Tons</div><div class="value" id="kpiTons">0.00</div><div class="muted">Net tons</div></div>
+      <div class="card kpi"><div class="label">Tickets</div><div class="value" id="kpiTickets">0</div><div class="muted">Current view</div></div>
+      <div class="card kpi"><div class="label">Customers</div><div class="value" id="kpiCustomers">0</div><div class="muted">Unique accounts</div></div>
+    </section>
+    <section class="card">
+      <div class="table-toolbar">
+        <strong>My Trackers</strong>
+        <button id="addTrackerBtn" class="tracker-add" type="button">+ Add Card</button>
+      </div>
+      <div id="trackerBuilder" class="tracker-builder" style="display:none">
+        <select id="tMetric">
+          <option value="runs">Runs (ticket count)</option>
+          <option value="tons">Tons</option>
+          <option value="revenue">Revenue $</option>
+          <option value="customers">Unique customers</option>
+        </select>
+        <select id="tCustomer"><option value="">All customers</option></select>
+        <input id="tProduct" placeholder="Product contains (optional)">
+        <select id="tPeriod">
+          <option value="filter">Follow header filters</option>
+          <option value="today">Today</option>
+          <option value="week">This week</option>
+          <option value="month">This month</option>
+          <option value="all">All time</option>
+          <option value="date">Specific date…</option>
+        </select>
+        <input id="tDate" type="date" style="display:none">
+        <select id="tStyle">
+          <option value="hl">Highlight card (blue)</option>
+          <option value="compact">Compact card</option>
+          <option value="table">Summary table (full review)</option>
+          <option value="bars-customers">Top customers (bars)</option>
+          <option value="bars-products">Top products (bars)</option>
+          <option value="list">Ticket list</option>
+        </select>
+        <input id="tTitle" placeholder="Card title (optional)">
+        <button id="tSave" type="button">Add</button>
+        <button id="tCancel" class="ghost" type="button">Cancel</button>
+      </div>
+      <div id="trackerCards" class="tracker-grid"></div>
+    </section>
+  </main>
+  <script src="/auth.js"></script>
+  <script>
+    let allRows = [];
+    let statusBase = 'Reading quickbooks.db...';
+    let nextAutoRefreshAt = 0;
+    let refreshInFlight = false;
+    const AUTO_REFRESH_MS = 15_000;
+    const AUTO_REFRESH_STOP_HOUR = 18;
+    const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+    const number = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
+    const $ = id => document.getElementById(id);
+    const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const today = () => new Date().toISOString().slice(0, 10);
+    const monthStart = () => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10); };
+
+    function filterRows() {
+      const from = $('fromDate').value;
+      const to = $('toDate').value;
+      const payment = $('paymentFilter').value;
+      const search = $('searchBox').value.trim().toLowerCase();
+      return allRows.filter(r => {
+        if (from && r.date && r.date < from) return false;
+        if (to && r.date && r.date > to) return false;
+        if (payment && r.payment !== payment) return false;
+        if (search && ![r.customer, r.ticketNo, r.invoiceNo, r.product, r.truck, r.origin, r.memo].join(' ').toLowerCase().includes(search)) return false;
+        return true;
+      });
+    }
+
+    function grouped(rows, key) {
+      const map = new Map();
+      for (const r of rows) {
+        const k = r[key] || 'Unknown';
+        const item = map.get(k) || { key: k, amount: 0, tons: 0, count: 0 };
+        item.amount += r.amount || 0;
+        item.tons += r.tons || 0;
+        item.count += 1;
+        map.set(k, item);
+      }
+      return [...map.values()].sort((a, b) => b.amount - a.amount);
+    }
+
+    function barsHtml(data, klass) {
+      const top = data.slice(0, 8);
+      const max = Math.max(...top.map(x => x.amount), 1);
+      if (!top.length) return '<span class="muted">No data for this filter.</span>';
+      return top.map(x => `<div class="bar-row" data-key="${esc(x.key)}" title="Click to filter tickets"><div class="bar-label">${esc(x.key)}</div><div class="track"><div class="fill ${klass}" style="width:${Math.max(2, x.amount / max * 100)}%"></div></div><div class="num">${money.format(x.amount)}</div></div>`).join('');
+    }
+
+    function ticketListHtml(rows) {
+      if (!rows.length) return '<span class="muted">No tickets for this filter.</span>';
+      return `<div class="t-list-wrap"><table class="t-list"><thead><tr>
+        <th>Date</th><th>Ticket</th><th>Invoice</th><th>Customer</th><th>Product</th>
+        <th class="num">Tons</th><th class="num">Rate</th><th class="num">Amount</th>
+        <th>Payment</th><th>Truck</th><th></th>
+      </tr></thead><tbody>${rows.slice(0, 500).map(r => `<tr data-id="${r.id}" class="ticket-row">
+        <td>${esc(r.date)}</td><td>${esc(r.ticketNo)}</td><td>${esc(r.invoiceNo)}</td>
+        <td>${esc(r.customer)}</td><td>${esc(r.product)}</td>
+        <td class="num">${r.tons == null ? '' : number.format(r.tons)}</td>
+        <td class="num">${r.rate == null ? '' : money.format(r.rate)}</td>
+        <td class="num">${r.amount == null ? '' : money.format(r.amount)}</td>
+        <td><span class="badge ${r.isAr ? 'ar' : ''}">${esc(r.payment || '-')}</span></td>
+        <td>${esc(r.truck)}</td>
+        <td><a class="edit-link" href="/ticket.html?id=${r.id}">Edit</a></td>
+      </tr>`).join('')}</tbody></table></div>`;
+    }
+
+    function render() {
+      const rows = filterRows();
+      const totalAmount = rows.reduce((s, r) => s + (r.amount || 0), 0);
+      const arTotal = rows.reduce((s, r) => s + (r.arAmount || 0), 0);
+      const totalTons = rows.reduce((s, r) => s + (r.tons || 0), 0);
+      $('kpiAmount').textContent = money.format(totalAmount);
+      $('kpiAr').textContent = money.format(arTotal);
+      $('kpiTons').textContent = number.format(totalTons);
+      $('kpiTickets').textContent = number.format(rows.length);
+      $('kpiCustomers').textContent = number.format(new Set(rows.map(r => r.customer).filter(Boolean)).size);
+      if (typeof renderTrackers === 'function' && $('trackerCards')) renderTrackers();
+    }
+
+    function setStatusBase(text) {
+      statusBase = text;
+      updateAutoRefreshStatus();
+    }
+
+    function isAutoRefreshActive() {
+      return new Date().getHours() < AUTO_REFRESH_STOP_HOUR;
+    }
+
+    function updateAutoRefreshStatus() {
+      if (!isAutoRefreshActive()) {
+        $('status').textContent = `${statusBase} · auto refresh paused after 6:00 PM`;
+        return;
+      }
+
+      const remaining = nextAutoRefreshAt
+        ? Math.max(0, Math.ceil((nextAutoRefreshAt - Date.now()) / 1000))
+        : Math.ceil(AUTO_REFRESH_MS / 1000);
+      $('status').textContent = `${statusBase} · auto refresh in ${remaining}s`;
+    }
+
+    function scheduleAutoRefresh() {
+      if (!isAutoRefreshActive()) {
+        nextAutoRefreshAt = 0;
+        updateAutoRefreshStatus();
+        return;
+      }
+
+      nextAutoRefreshAt = Date.now() + AUTO_REFRESH_MS;
+      updateAutoRefreshStatus();
+    }
+
+    async function refreshDashboard() {
+      if (refreshInFlight) return;
+      refreshInFlight = true;
+      try {
+        await load();
+      } finally {
+        refreshInFlight = false;
+        scheduleAutoRefresh();
+      }
+    }
+
+    async function load() {
+      $('errorBox').style.display = 'none';
+      $('refreshBtn').disabled = true;
+      try {
+        const res = await fetch('/api/tickets', { cache: 'no-store' });
+        if (!res.ok) throw new Error(await res.text());
+        allRows = await res.json();
+        const payments = [...new Set(allRows.map(r => r.payment).filter(Boolean))].sort();
+        const selected = $('paymentFilter').value;
+        $('paymentFilter').innerHTML = '<option value="">All Payments</option>' + payments.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+        $('paymentFilter').value = payments.includes(selected) ? selected : '';
+        setStatusBase(`${allRows.length} ticket rows from local quickbooks.db, updated ${new Date().toLocaleString()}`);
+        render();
+      } catch (err) {
+        $('errorBox').textContent = err.message;
+        $('errorBox').style.display = 'block';
+      } finally {
+        $('refreshBtn').disabled = false;
+      }
+    }
+
+    // ---- Unified dashboard config: everything is a tracker card ----
+    let dashCfg = { cards: [] };
+    let editingIndex = null;   // null = adding; number = editing that card
+
+    // Default layout: Today review + customer run cards + Top Customers /
+    // Top Products / Ticket Detail (all ordinary draggable tracker cards).
+    const DEFAULT_CARDS = [
+      { style: 'table', metric: 'runs', period: 'today', customer: null, product: null, title: 'Today — Review' },
+      { style: 'hl', metric: 'runs', period: 'today', customer: 'WEST COAST SAND', product: null, title: 'West Coast Sand & Gravel — Runs Today' },
+      { style: 'hl', metric: 'runs', period: 'today', customer: 'EDCO', product: null, title: 'EDCO — Runs Today' },
+      { style: 'hl', metric: 'runs', period: 'today', customer: 'REPUBLIC', product: null, title: 'Republic — Runs Today' },
+      { style: 'bars-customers', metric: 'revenue', period: 'filter', customer: null, product: null, title: 'Top Customers' },
+      { style: 'bars-products', metric: 'revenue', period: 'filter', customer: null, product: null, title: 'Top Products' },
+      { style: 'list', metric: 'runs', period: 'filter', customer: null, product: null, title: 'Ticket Detail' }
+    ];
+
+    // ---------- My Trackers: user-defined cards, add/remove, shared via server ----------
+    let trackerCards = [];
+
+    const METRIC_LABEL = { runs: 'Runs', tons: 'Tons', revenue: 'Revenue', customers: 'Customers' };
+    const PERIOD_LABEL = { today: 'Today', week: 'This week', month: 'This month', all: 'All time', filter: 'Header filters' };
+
+    function trackerRange(c) {
+      const period = typeof c === 'string' ? c : c.period;
+      // "filter" = follow the dashboard header date range / payment / search
+      if (period === 'filter') {
+        return [$('fromDate')?.value || null, $('toDate')?.value || null];
+      }
+      const now = new Date();
+      const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      if (period === 'today') { const t = iso(now); return [t, t]; }
+      if (period === 'date' && c.date) return [c.date, c.date];
+      if (period === 'week') { const d = new Date(now); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return [iso(d), iso(now)]; }
+      if (period === 'month') { return [iso(new Date(now.getFullYear(), now.getMonth(), 1)), iso(now)]; }
+      return [null, null];
+    }
+
+    function periodLabel(c) {
+      if (c.period === 'date' && c.date) return c.date;
+      if (c.period === 'filter') {
+        const from = $('fromDate')?.value || '';
+        const to = $('toDate')?.value || '';
+        if (from || to) return `${from || '…'} → ${to || '…'}`;
+        return 'Header filters';
+      }
+      return PERIOD_LABEL[c.period] || c.period;
+    }
+
+    // In = positive amount, Out = negative amount (same rule as the day summary)
+    function trackerRows(c) {
+      const [from, to] = trackerRange(c);
+      const payment = c.period === 'filter' ? ($('paymentFilter')?.value || '') : '';
+      const search = c.period === 'filter' ? ($('searchBox')?.value.trim().toLowerCase() || '') : '';
+      // customer matches by "contains" so e.g. EDCO covers EDCO RECYCLING and Edco
+      return allRows.filter(r => {
+        if (from && (!r.date || r.date < from)) return false;
+        if (to && r.date && r.date > to) return false;
+        if (c.customer && !(r.customer || '').toLowerCase().includes(c.customer.toLowerCase())) return false;
+        if (c.product && !(r.product || '').toLowerCase().includes(c.product.toLowerCase())) return false;
+        if (payment && r.payment !== payment) return false;
+        if (search && ![r.customer, r.ticketNo, r.invoiceNo, r.product, r.truck, r.origin, r.memo].join(' ').toLowerCase().includes(search)) return false;
+        return true;
+      });
+    }
+
+    // Full review numbers for the summary-table card style.
+    function trackerSummary(c) {
+      const rows = trackerRows(c);
+      const inRows = rows.filter(r => (r.amount || 0) > 0);
+      const outRows = rows.filter(r => (r.amount || 0) < 0);
+      const sum = (a, k) => a.reduce((s, r) => s + (r[k] || 0), 0);
+      const uniq = a => new Set(a.map(r => r.customer).filter(Boolean)).size;
+      return {
+        count: rows.length,
+        tons: { in: number.format(sum(inRows, 'tons')), out: number.format(sum(outRows, 'tons')), net: number.format(sum(rows, 'tons')) },
+        amount: { in: money.format(sum(inRows, 'amount')), out: money.format(sum(outRows, 'amount')), net: money.format(sum(rows, 'amount')) },
+        ar: { in: money.format(sum(inRows, 'arAmount')), out: money.format(sum(outRows, 'arAmount')), net: money.format(sum(rows, 'arAmount')) },
+        tickets: { in: number.format(inRows.length), out: number.format(outRows.length), total: number.format(rows.length) },
+        customers: { in: number.format(uniq(inRows)), out: number.format(uniq(outRows)), total: number.format(uniq(rows)) }
+      };
+    }
+
+    function trackerData(c) {
+      const rows = trackerRows(c);
+      const inRows = rows.filter(r => (r.amount || 0) > 0);
+      const outRows = rows.filter(r => (r.amount || 0) < 0);
+      const sumT = a => a.reduce((s, r) => s + (r.tons || 0), 0);
+      const sumA = a => a.reduce((s, r) => s + (r.amount || 0), 0);
+      const uniq = a => new Set(a.map(r => r.customer).filter(Boolean)).size;
+      if (c.metric === 'tons') return {
+        main: number.format(sumT(rows)), in: number.format(sumT(inRows)),
+        out: number.format(sumT(outRows)), total: number.format(rows.length), totalLabel: 'Tickets', count: rows.length };
+      if (c.metric === 'revenue') return {
+        main: money.format(sumA(rows)), in: money.format(sumA(inRows)),
+        out: money.format(sumA(outRows)), total: number.format(rows.length), totalLabel: 'Tickets', count: rows.length };
+      if (c.metric === 'customers') return {
+        main: number.format(uniq(rows)), in: number.format(uniq(inRows)),
+        out: number.format(uniq(outRows)), total: number.format(rows.length), totalLabel: 'Tickets', count: rows.length };
+      return {
+        main: number.format(rows.length), in: number.format(inRows.length),
+        out: number.format(outRows.length), total: number.format(rows.length), totalLabel: 'Tickets total', count: rows.length };
+    }
+
+    function trackerTitle(c) {
+      return c.customer || c.product || 'All tickets';
+    }
+
+    function renderTrackers() {
+      const el = $('trackerCards');
+      if (!trackerCards.length) {
+        el.innerHTML = '<span class="muted">No tracker cards yet — click + Add Card to build one (e.g. a customer\'s runs this week).</span>';
+        return;
+      }
+      el.innerHTML = trackerCards.map((c, i) => {
+        const style = c.style || 'hl';
+        const periodText = periodLabel(c);
+        const filterSub = `${c.customer ? esc(c.customer) : 'All customers'}${c.product ? ' · ' + esc(c.product) : ''}`;
+        const controls = `
+          <div class="t-controls">
+            <button class="t-edit" data-i="${i}" title="Edit card">✎</button>
+            <button class="t-del" data-i="${i}" title="Remove card">✕</button>
+          </div>`;
+
+        if (style === 'table') {
+          const s = trackerSummary(c);
+          const title = c.title || `${trackerTitle(c)} — Review ${periodText}`;
+          return `
+        <div class="tracker-card tbl" draggable="true" data-i="${i}">
+          ${controls}
+          <div class="t-title">${esc(title.toUpperCase())}</div>
+          <div class="t-sub">${s.count === 0 ? 'No matching tickets.' : filterSub + ' · ' + periodText}</div>
+          <table class="t-table">
+            <thead><tr><th></th><th>In</th><th>Out</th><th>Net</th></tr></thead>
+            <tbody>
+              <tr><td class="row-lbl">Tons</td><td class="pos">${s.tons.in}</td><td class="neg">${s.tons.out}</td><td>${s.tons.net}</td></tr>
+              <tr><td class="row-lbl">Total Amount</td><td class="pos">${s.amount.in}</td><td class="neg">${s.amount.out}</td><td>${s.amount.net}</td></tr>
+              <tr><td class="row-lbl">AR Total</td><td class="pos">${s.ar.in}</td><td class="neg">${s.ar.out}</td><td>${s.ar.net}</td></tr>
+              <tr><td class="row-lbl">Tickets</td><td>${s.tickets.in}</td><td>${s.tickets.out}</td><td>${s.tickets.total}</td></tr>
+              <tr><td class="row-lbl">Customers</td><td>${s.customers.in}</td><td>${s.customers.out}</td><td>${s.customers.total}</td></tr>
+            </tbody>
+          </table>
+        </div>`;
+        }
+
+        if (style === 'bars-customers' || style === 'bars-products') {
+          const rows = trackerRows(c);
+          const key = style === 'bars-customers' ? 'customer' : 'product';
+          const klass = style === 'bars-customers' ? 'blue' : 'yellow';
+          const title = c.title || (style === 'bars-customers' ? 'Top Customers' : 'Top Products');
+          return `
+        <div class="tracker-card tbl" draggable="true" data-i="${i}">
+          ${controls}
+          <div class="t-title">${esc(title.toUpperCase())}</div>
+          <div class="t-sub">${number.format(rows.length)} tickets · ${periodText}</div>
+          <div class="t-bars">${barsHtml(grouped(rows, key), klass)}</div>
+        </div>`;
+        }
+
+        if (style === 'list') {
+          const rows = trackerRows(c);
+          const title = c.title || 'Ticket Detail';
+          return `
+        <div class="tracker-card wide" draggable="true" data-i="${i}">
+          ${controls}
+          <div class="t-title">${esc(title.toUpperCase())}</div>
+          <div class="t-sub">${number.format(rows.length)} rows · ${periodText}${c.customer || c.product ? ' · ' + filterSub : ''}</div>
+          ${ticketListHtml(rows)}
+        </div>`;
+        }
+
+        const d = trackerData(c);
+        const hl = style === 'hl';
+        const title = c.title || `${trackerTitle(c)} — ${METRIC_LABEL[c.metric] || c.metric} ${periodText}`;
+        const sub = d.count === 0 ? 'No matching tickets.' : filterSub + ' · ' + periodText;
+        const split = `
+          <div class="t-split">
+            <div><div class="t-lbl">In</div><div class="t-n">${d.in}</div></div>
+            <div><div class="t-lbl">Out</div><div class="t-n">${d.out}</div></div>
+            <div><div class="t-lbl">${d.totalLabel}</div><div class="t-n">${d.total}</div></div>
+          </div>`;
+        return `
+        <div class="tracker-card${hl ? ' hl' : ''}" draggable="true" data-i="${i}">
+          ${controls}
+          <div class="t-title">${esc(title.toUpperCase())}</div>
+          <div class="t-value">${d.main}</div>
+          <div class="t-sub">${sub}</div>
+          ${hl ? split : ''}
+        </div>`;
+      }).join('');
+
+      el.querySelectorAll('.t-del').forEach(btn => btn.addEventListener('click', async e => {
+        e.stopPropagation();
+        trackerCards.splice(Number(btn.dataset.i), 1);
+        await saveTrackers();
+        renderTrackers();
+      }));
+      el.querySelectorAll('.t-edit').forEach(btn => btn.addEventListener('click', e => {
+        e.stopPropagation();
+        openBuilder(Number(btn.dataset.i));
+      }));
+
+      // Click a bar → put that key into the search box (filters Ticket Detail cards with period=filter)
+      el.querySelectorAll('.bar-row[data-key]').forEach(row => {
+        row.addEventListener('click', e => {
+          e.stopPropagation();
+          $('searchBox').value = row.dataset.key;
+          render();
+        });
+      });
+
+      // Click a ticket row → open editor (ignore Edit link itself)
+      el.querySelectorAll('tr.ticket-row[data-id]').forEach(tr => {
+        tr.addEventListener('click', e => {
+          if (e.target.closest('a')) return;
+          location.href = '/ticket.html?id=' + tr.dataset.id;
+        });
+      });
+
+      // Drag to reorder; the new order is saved for everyone.
+      let dragFrom = null;
+      el.querySelectorAll('.tracker-card').forEach(card => {
+        card.addEventListener('dragstart', e => {
+          // Don't start a card drag from interactive controls / bars / table rows
+          if (e.target.closest('button, a, input, select, .bar-row, tr.ticket-row')) {
+            e.preventDefault();
+            return;
+          }
+          dragFrom = Number(card.dataset.i);
+          card.classList.add('dragging');
+        });
+        card.addEventListener('dragend', () => card.classList.remove('dragging'));
+        card.addEventListener('dragover', e => { e.preventDefault(); card.classList.add('drop-target'); });
+        card.addEventListener('dragleave', () => card.classList.remove('drop-target'));
+        card.addEventListener('drop', async e => {
+          e.preventDefault();
+          card.classList.remove('drop-target');
+          const to = Number(card.dataset.i);
+          if (dragFrom === null || dragFrom === to) return;
+          const [moved] = trackerCards.splice(dragFrom, 1);
+          trackerCards.splice(to, 0, moved);
+          dragFrom = null;
+          await saveTrackers();
+          renderTrackers();
+        });
+      });
+    }
+
+    async function saveTrackers() {
+      dashCfg.cards = trackerCards;
+      try {
+        await fetch('/api/dashboard/cards', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          // dayCustomers: [] doubles as a "configured" marker so an emptied
+          // dashboard is not re-seeded with the defaults on next load
+          body: JSON.stringify({ cards: trackerCards, dayCustomers: [], highlight: null })
+        });
+      } catch { /* keep local state; next save retries */ }
+    }
+
+    function ensureSectionCards(cards) {
+      // One-time upgrade: older layouts only had the Today/run cards.
+      // Append Top Customers / Top Products / Ticket Detail if missing.
+      const need = [
+        { style: 'bars-customers', card: DEFAULT_CARDS.find(c => c.style === 'bars-customers') },
+        { style: 'bars-products', card: DEFAULT_CARDS.find(c => c.style === 'bars-products') },
+        { style: 'list', card: DEFAULT_CARDS.find(c => c.style === 'list') }
+      ];
+      let changed = false;
+      for (const { style, card } of need) {
+        if (!cards.some(c => c.style === style)) {
+          cards.push({ ...card });
+          changed = true;
+        }
+      }
+      return changed;
+    }
+
+    async function loadTrackerCards() {
+      let fresh = false;
+      try {
+        const res = await fetch('/api/dashboard/cards', { cache: 'no-store' });
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          dashCfg.cards = data;                              // legacy shape
+        } else if (data && typeof data === 'object') {
+          dashCfg.cards = Array.isArray(data.cards) ? data.cards : [];
+          // never configured before -> seed the default layout once
+          fresh = dashCfg.cards.length === 0 && data.dayCustomers == null && data.highlight == null;
+        }
+      } catch { /* defaults stay */ }
+      if (fresh) {
+        dashCfg.cards = DEFAULT_CARDS.map(c => ({ ...c }));
+        trackerCards = dashCfg.cards;
+        saveTrackers();
+      } else if (ensureSectionCards(dashCfg.cards)) {
+        trackerCards = dashCfg.cards;
+        saveTrackers();
+      }
+      trackerCards = dashCfg.cards;
+      renderTrackers();
+    }
+
+    function populateTrackerCustomers() {
+      const customers = [...new Set(allRows.map(r => r.customer).filter(Boolean))].sort();
+      const sel = $('tCustomer');
+      const current = sel.value;
+      sel.innerHTML = '<option value="">All customers</option>' + customers.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+      sel.value = customers.includes(current) ? current : '';
+    }
+
+    // Open the builder: blank for a new card, prefilled when editing (index given).
+    function openBuilder(index) {
+      populateTrackerCustomers();
+      editingIndex = (typeof index === 'number') ? index : null;
+      const c = editingIndex !== null ? trackerCards[editingIndex] : null;
+      $('tMetric').value = c?.metric || 'runs';
+      $('tCustomer').value = c?.customer || '';
+      $('tProduct').value = c?.product || '';
+      // Bars/list cards default to header filters; metric cards default to today.
+      const defaultPeriod = (c?.style === 'bars-customers' || c?.style === 'bars-products' || c?.style === 'list')
+        ? 'filter' : 'today';
+      $('tPeriod').value = c?.period || defaultPeriod;
+      $('tDate').value = c?.date || '';
+      $('tStyle').value = c?.style || 'hl';
+      $('tTitle').value = c?.title || '';
+      $('tDate').style.display = $('tPeriod').value === 'date' ? '' : 'none';
+      $('tSave').textContent = editingIndex !== null ? 'Update' : 'Add';
+      $('trackerBuilder').style.display = 'grid';
+    }
+
+    $('tPeriod').addEventListener('change', () => {
+      $('tDate').style.display = $('tPeriod').value === 'date' ? '' : 'none';
+    });
+    $('addTrackerBtn').addEventListener('click', () => {
+      if ($('trackerBuilder').style.display !== 'none' && editingIndex === null) {
+        $('trackerBuilder').style.display = 'none';
+        return;
+      }
+      openBuilder(null);
+    });
+    $('tCancel').addEventListener('click', () => { $('trackerBuilder').style.display = 'none'; editingIndex = null; });
+    $('tSave').addEventListener('click', async () => {
+      const card = {
+        metric: $('tMetric').value,
+        customer: $('tCustomer').value || null,
+        product: $('tProduct').value.trim() || null,
+        period: $('tPeriod').value,
+        date: $('tPeriod').value === 'date' ? ($('tDate').value || null) : null,
+        style: $('tStyle').value,
+        title: $('tTitle').value.trim() || null
+      };
+      if (editingIndex !== null) trackerCards[editingIndex] = card;
+      else trackerCards.push(card);
+      editingIndex = null;
+      $('trackerBuilder').style.display = 'none';
+      await saveTrackers();
+      renderTrackers();
+    });
+
+    $('fromDate').value = monthStart();
+    $('toDate').value = today();
+    ['fromDate', 'toDate', 'paymentFilter', 'searchBox'].forEach(id => $(id).addEventListener('input', render));
+    $('refreshBtn').addEventListener('click', refreshDashboard);
+    loadTrackerCards();
+    setInterval(() => {
+      if (!document.hidden && isAutoRefreshActive() && Date.now() >= nextAutoRefreshAt) refreshDashboard();
+    }, 1000);
+    setInterval(updateAutoRefreshStatus, 1000);
+    scheduleAutoRefresh();
+    refreshDashboard();
+  </script>
+</body>
+</html>

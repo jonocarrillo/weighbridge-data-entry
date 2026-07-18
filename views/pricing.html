@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pricing Rules — AIS</title>
+<style>
+  :root {
+    --bg: #f2f3f5;
+    --panel: #ffffff;
+    --line: #d8dde3;
+    --text: #1c1f24;
+    --muted: #6b7380;
+    --accent: #00c8dc;
+    --accent-hover: #00aebf;
+    --orange: #f58220;
+    --green: #3cb446;
+    --slate: #465f82;
+    --label: #4a73b8;
+    --error: #b53030;
+    --info-bg: #e8f4ff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
+  body { font: 14px/1.4 "Segoe UI", system-ui, -apple-system, sans-serif; }
+
+  header.app-bar {
+    background: #1c2330;
+    color: #fff;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
+  header.app-bar h1 { font-size: 16px; margin: 0; font-weight: 600; letter-spacing: 0.5px; }
+  header.app-bar a.back { color: #a3b1c2; text-decoration: none; font-size: 12px; margin-left: auto; }
+  header.app-bar a.back:hover { color: #fff; }
+
+  main { padding: 16px; max-width: 1400px; margin: 0 auto; }
+
+  .layout { display: grid; grid-template-columns: minmax(0, 460px) 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 1023px) { .layout { grid-template-columns: 1fr; } }
+
+  section.panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 14px;
+  }
+  section.panel h2 {
+    margin: 0 0 12px;
+    font-size: 13px;
+    color: var(--label);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 6px;
+  }
+
+  label.field { display: block; margin-bottom: 10px; }
+  label.field > .lbl {
+    display: block;
+    color: var(--label);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 3px;
+    font-weight: 600;
+  }
+  label.field input, label.field select, label.field textarea {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: #fff;
+    font: inherit;
+    color: var(--text);
+  }
+  label.field input:disabled, label.field select:disabled {
+    background: #f0f1f3;
+    color: var(--muted);
+  }
+  label.field input.numeric { text-align: right; font-variant-numeric: tabular-nums; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .hint { font-size: 12px; color: var(--muted); font-style: italic; margin-top: 4px; }
+  .form-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+
+  button.btn, label.btn {
+    border: 0;
+    border-radius: 4px;
+    padding: 9px 16px;
+    color: #fff;
+    font: 600 13px "Segoe UI", system-ui, sans-serif;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  button.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.btn.primary, label.btn.primary { background: var(--accent); }
+  button.btn.primary:hover { background: var(--accent-hover); }
+  button.btn.orange, label.btn.orange { background: var(--orange); }
+  button.btn.slate, label.btn.slate { background: var(--slate); }
+  button.btn.danger { background: var(--error); }
+  button.btn.ghost { background: transparent; color: var(--slate); border: 1px solid var(--line); }
+  button.btn.ghost:hover { background: #f7f8fa; }
+
+  .grid-wrap { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .grid-head {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .grid-head input.search {
+    flex: 1;
+    padding: 7px 10px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    font: inherit;
+  }
+  .grid-head .count { color: var(--muted); font-size: 12px; }
+  .table-scroll { max-height: calc(100vh - 220px); overflow: auto; }
+
+  table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.grid th, table.grid td { padding: 7px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  table.grid th { background: #f8f9fb; font-weight: 600; color: var(--label); text-align: left; position: sticky; top: 0; z-index: 1; }
+  table.grid td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  table.grid tbody tr { cursor: pointer; }
+  table.grid tbody tr:hover { background: #f3f7ff; }
+  table.grid tbody tr.selected { background: var(--info-bg); }
+  .empty { padding: 32px; text-align: center; color: var(--muted); font-style: italic; }
+
+  .toast {
+    position: fixed; top: 60px; right: 16px;
+    background: var(--slate); color: #fff;
+    padding: 12px 16px; border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    z-index: 100; max-width: 360px;
+    opacity: 0; transform: translateY(-10px);
+    transition: opacity 0.2s, transform 0.2s;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.error { background: var(--error); }
+  .toast.success { background: var(--green); }
+
+  .modal {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 50;
+    align-items: center; justify-content: center;
+    padding: 16px;
+  }
+  .modal.open { display: flex; }
+  .modal .card {
+    background: #fff; border-radius: 8px;
+    width: 100%; max-width: 640px;
+    padding: 20px;
+  }
+  .modal .card h3 { margin: 0 0 12px; }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+  pre.errors { background: #fdf3f3; border: 1px solid #f3c2c2; border-radius: 4px; padding: 10px; max-height: 220px; overflow: auto; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<header class="app-bar">
+  <h1>PRICING RULES</h1>
+  <a href="/" class="back">‹ Dashboard</a>
+</header>
+
+<main>
+<div class="layout">
+
+  <section class="panel">
+    <h2 id="formTitle">New Rule</h2>
+
+    <div class="grid-2">
+      <label class="field">
+        <span class="lbl">Customer</span>
+        <input type="text" id="fCustomer" list="dl-customers" autocomplete="off">
+        <datalist id="dl-customers"></datalist>
+      </label>
+      <label class="field">
+        <span class="lbl">Class</span>
+        <input type="text" id="fClass" list="dl-classes" autocomplete="off">
+        <datalist id="dl-classes"></datalist>
+      </label>
+    </div>
+
+    <label class="field">
+      <span class="lbl">Product / Service *</span>
+      <input type="text" id="fProduct" list="dl-products" autocomplete="off">
+      <datalist id="dl-products"></datalist>
+    </label>
+
+    <div class="grid-3">
+      <label class="field">
+        <span class="lbl">Pricing Type</span>
+        <select id="fPricingType">
+          <option value="Flat">Flat (per ton)</option>
+          <option value="Run">Run (flat per ticket)</option>
+          <option value="Hauling">Hauling</option>
+        </select>
+      </label>
+      <label class="field">
+        <span class="lbl">Payment Method</span>
+        <select id="fAccountType">
+          <option value="Regular">Regular (operator picks)</option>
+          <option value="Cash">Cash</option>
+          <option value="Credit">Credit</option>
+          <option value="Debit">Debit</option>
+          <option value="AR">AR</option>
+          <option value="Expense">Expense</option>
+        </select>
+      </label>
+      <label class="field">
+        <span class="lbl">Effective (Start) Date</span>
+        <input type="date" id="fEffective">
+      </label>
+    </div>
+
+    <label class="field">
+      <span class="lbl">End Date <span style="font-weight:400;color:var(--muted);">(optional)</span></span>
+      <input type="date" id="fEndDate">
+    </label>
+
+    <label class="field">
+      <span class="lbl">Rate <span style="font-weight:400;color:var(--muted);">(per ton for Flat, per ticket for Run)</span></span>
+      <input type="text" id="fRate" inputmode="decimal" class="numeric">
+    </label>
+
+    <div class="grid-3">
+      <label class="field">
+        <span class="lbl">Base Rate</span>
+        <input type="text" id="fBaseRate" inputmode="decimal" class="numeric">
+      </label>
+      <label class="field">
+        <span class="lbl">Allowed Tons</span>
+        <input type="text" id="fAllowedTons" inputmode="decimal" class="numeric">
+      </label>
+      <label class="field">
+        <span class="lbl">Overage Rate</span>
+        <input type="text" id="fOverageRate" inputmode="decimal" class="numeric">
+      </label>
+    </div>
+
+    <div class="grid-3">
+      <label class="field">
+        <span class="lbl">Miles</span>
+        <input type="text" id="fMiles" inputmode="decimal" class="numeric">
+      </label>
+      <label class="field">
+        <span class="lbl">Mile Rate</span>
+        <input type="text" id="fMileRate" inputmode="decimal" class="numeric">
+      </label>
+      <label class="field">
+        <span class="lbl">Surcharge %</span>
+        <input type="text" id="fSurchargePercent" inputmode="decimal" class="numeric">
+      </label>
+    </div>
+
+    <label class="field">
+      <span class="lbl">Notes</span>
+      <input type="text" id="fNotes">
+    </label>
+
+    <div class="hint">
+      Flat: tons × rate. Run: rate (flat per ticket). Hauling: base + max(tons − allowed, 0) × overage rate + miles × mile rate.
+      Surcharge % applies on top of every pricing type: total × (1 + surcharge%).
+      Effective/End dates with year &lt; 2020 repeat every year (template for recurring seasons).
+    </div>
+
+    <div class="form-actions">
+      <button class="btn primary" id="btnSave">Save</button>
+      <button class="btn ghost" id="btnNew">New</button>
+      <button class="btn danger" id="btnDelete" disabled>Delete</button>
+      <label class="btn orange" for="fileImport">Import CSV</label>
+      <input type="file" id="fileImport" accept=".csv" style="display:none;">
+    </div>
+  </section>
+
+  <div class="grid-wrap">
+    <div class="grid-head">
+      <input class="search" id="search" placeholder="Filter rules by customer / product / class…">
+      <span class="count" id="ruleCount">0 rules</span>
+    </div>
+    <div class="table-scroll">
+      <div class="empty" id="emptyGrid">No pricing rules yet — add one on the left or import a CSV.</div>
+      <table class="grid" id="grid" style="display:none;"></table>
+    </div>
+  </div>
+
+</div>
+</main>
+
+<div class="modal" id="importModal">
+  <div class="card">
+    <h3 id="importTitle">Import Result</h3>
+    <p id="importSummary"></p>
+    <pre class="errors" id="importErrors" style="display:none;"></pre>
+    <div class="modal-actions">
+      <button class="btn primary" id="btnCloseImport">OK</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/auth.js"></script>
+<script>
+'use strict';
+
+const $ = id => document.getElementById(id);
+
+const state = {
+  rules: [],
+  filter: '',
+  selectedId: null,
+};
+
+const f = {
+  customer: $('fCustomer'),
+  className: $('fClass'),
+  product: $('fProduct'),
+  pricingType: $('fPricingType'),
+  accountType: $('fAccountType'),
+  effective: $('fEffective'),
+  endDate: $('fEndDate'),
+  rate: $('fRate'),
+  baseRate: $('fBaseRate'),
+  allowedTons: $('fAllowedTons'),
+  overageRate: $('fOverageRate'),
+  miles: $('fMiles'),
+  mileRate: $('fMileRate'),
+  surchargePercent: $('fSurchargePercent'),
+  notes: $('fNotes'),
+};
+
+const toast = (msg, kind = '') => {
+  const el = $('toast');
+  el.textContent = msg;
+  el.className = 'toast show ' + kind;
+  setTimeout(() => { el.className = 'toast ' + kind; }, 2400);
+};
+
+function parseNumber(text) {
+  if (text == null || text === '') return null;
+  const cleaned = String(text).replace(/[$,%]/g, '').trim();
+  const n = parseFloat(cleaned);
+  return Number.isFinite(n) ? n : null;
+}
+
+function fmt(n, decimals = 2) {
+  if (n == null || n === '') return '';
+  const x = Number(n);
+  if (!Number.isFinite(x)) return '';
+  return x.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// Flat/Run only care about rate; Hauling adds base/allowed/overage/miles/mileRate.
+// Surcharge % applies to every pricing type, so it is always enabled.
+function applyPricingTypeMask() {
+  const type = f.pricingType.value;
+  const isHauling = type === 'Hauling';
+  f.rate.disabled = isHauling;
+  for (const el of [f.baseRate, f.allowedTons, f.overageRate, f.miles, f.mileRate]) {
+    el.disabled = !isHauling;
+  }
+  f.surchargePercent.disabled = false;
+}
+
+function clearForm() {
+  state.selectedId = null;
+  f.customer.value = '';
+  f.className.value = '';
+  f.product.value = '';
+  f.pricingType.value = 'Flat';
+  f.accountType.value = 'Regular';
+  f.effective.value = '';
+  f.endDate.value = '';
+  f.rate.value = '';
+  f.baseRate.value = '';
+  f.allowedTons.value = '';
+  f.overageRate.value = '';
+  f.miles.value = '';
+  f.mileRate.value = '';
+  f.surchargePercent.value = '';
+  f.notes.value = '';
+  $('formTitle').textContent = 'New Rule';
+  $('btnDelete').disabled = true;
+  applyPricingTypeMask();
+  document.querySelectorAll('#grid tbody tr.selected').forEach(r => r.classList.remove('selected'));
+  f.customer.focus();
+}
+
+function selectRule(rule) {
+  state.selectedId = rule.id;
+  f.customer.value = rule.customer ?? '';
+  f.className.value = rule.class ?? '';
+  f.product.value = rule.product ?? '';
+  // Normalize the pricing type from the server (Flat / Run / Hauling).
+  f.pricingType.value = (rule.pricingType === 'Hauling' || rule.pricingType === 'Run')
+    ? rule.pricingType
+    : 'Flat';
+  // account_type is normalized server-side to Regular / Cash / Credit / Debit / AR / Expense.
+  // Legacy "Account" rows normalize to "AR". Fall back to Regular for anything unexpected.
+  f.accountType.value = ['Cash', 'Credit', 'Debit', 'AR', 'Expense'].includes(rule.accountType)
+    ? rule.accountType
+    : 'Regular';
+  // Dates are stored as TEXT yyyy-MM-dd; <input type="date"> wants the same.
+  // For year-rollover template dates (year < 2020) we still show the literal value
+  // — the user can edit it as needed.
+  f.effective.value = rule.effectiveDate ? String(rule.effectiveDate).slice(0, 10) : '';
+  f.endDate.value = rule.endDate ? String(rule.endDate).slice(0, 10) : '';
+  // For Hauling rules the rate column is unused (overage_rate carries the per-ton
+  // value), so leave the disabled Rate field blank instead of showing a stale 0.00.
+  f.rate.value = (rule.pricingType !== 'Hauling' && rule.rate != null)
+    ? Number(rule.rate).toFixed(2)
+    : '';
+  f.baseRate.value = rule.baseRate != null ? Number(rule.baseRate) : '';
+  f.allowedTons.value = rule.allowedTons != null ? Number(rule.allowedTons) : '';
+  f.overageRate.value = rule.overageRate != null ? Number(rule.overageRate) : '';
+  f.miles.value = rule.miles != null ? Number(rule.miles) : '';
+  f.mileRate.value = rule.mileRate != null ? Number(rule.mileRate) : '';
+  f.surchargePercent.value = rule.surchargePercent != null ? Number(rule.surchargePercent) : '';
+  f.notes.value = rule.notes ?? '';
+  $('formTitle').textContent = `Edit Rule (id=${rule.id})`;
+  $('btnDelete').disabled = false;
+  applyPricingTypeMask();
+
+  document.querySelectorAll('#grid tbody tr.selected').forEach(r => r.classList.remove('selected'));
+  const tr = document.querySelector(`#grid tbody tr[data-id="${rule.id}"]`);
+  if (tr) tr.classList.add('selected');
+}
+
+function buildRequest() {
+  return {
+    customer: f.customer.value.trim() || null,
+    className: f.className.value.trim() || null,
+    productService: f.product.value.trim() || null,
+    pricingType: f.pricingType.value || 'Flat',
+    rate: parseNumber(f.rate.value),
+    baseRate: parseNumber(f.baseRate.value),
+    allowedTons: parseNumber(f.allowedTons.value),
+    overageRate: parseNumber(f.overageRate.value),
+    miles: parseNumber(f.miles.value),
+    mileRate: parseNumber(f.mileRate.value),
+    surchargePercent: parseNumber(f.surchargePercent.value),
+    accountType: f.accountType.value || 'Regular',
+    effectiveDate: f.effective.value || null,
+    endDate: f.endDate.value || null,
+    notes: f.notes.value.trim() || null,
+  };
+}
+
+async function loadRules() {
+  const res = await fetch('/api/pricing/rules');
+  if (!res.ok) { toast('Failed to load rules', 'error'); return; }
+  state.rules = await res.json();
+  renderGrid();
+}
+
+async function loadDropdowns() {
+  try {
+    const res = await fetch('/api/pricing/dropdowns');
+    const data = await res.json();
+    fill('dl-customers', data.customers);
+    fill('dl-classes', data.classes);
+    fill('dl-products', data.products);
+  } catch { /* fresh db */ }
+}
+function fill(id, items) {
+  const dl = $(id);
+  if (!dl || !items) return;
+  dl.innerHTML = items.map(v => `<option value="${escapeHtml(v)}"></option>`).join('');
+}
+
+function renderGrid() {
+  const term = state.filter.trim().toLowerCase();
+  const rows = !term ? state.rules : state.rules.filter(r => {
+    return (r.customer || '').toLowerCase().includes(term)
+        || (r.product || '').toLowerCase().includes(term)
+        || (r.class || '').toLowerCase().includes(term);
+  });
+
+  $('ruleCount').textContent = `${rows.length} of ${state.rules.length} rule${state.rules.length === 1 ? '' : 's'}`;
+
+  const table = $('grid');
+  if (rows.length === 0) {
+    table.style.display = 'none';
+    $('emptyGrid').style.display = '';
+    $('emptyGrid').textContent = state.rules.length === 0
+      ? 'No pricing rules yet — add one on the left or import a CSV.'
+      : 'No rules match the filter.';
+    return;
+  }
+  $('emptyGrid').style.display = 'none';
+  table.style.display = '';
+
+  const head = `<thead><tr>
+    <th>Customer</th><th>Class</th><th>Product</th>
+    <th>Type</th><th class="num">Rate</th><th class="num">Base</th>
+    <th class="num">Allowed</th><th class="num">Overage</th>
+    <th class="num">Miles</th><th class="num">Mile Rate</th><th class="num">Surcharge %</th>
+    <th>Payment</th><th>Effective</th><th>End</th><th>Notes</th>
+  </tr></thead>`;
+
+  const body = '<tbody>' + rows.map(r => `
+    <tr data-id="${r.id}" ${r.id === state.selectedId ? 'class="selected"' : ''}>
+      <td>${escapeHtml(r.customer)}</td>
+      <td>${escapeHtml(r.class)}</td>
+      <td>${escapeHtml(r.product)}</td>
+      <td>${escapeHtml(r.pricingType)}</td>
+      <td class="num">${fmt(r.rate)}</td>
+      <td class="num">${fmt(r.baseRate)}</td>
+      <td class="num">${fmt(r.allowedTons)}</td>
+      <td class="num">${fmt(r.overageRate)}</td>
+      <td class="num">${fmt(r.miles)}</td>
+      <td class="num">${fmt(r.mileRate)}</td>
+      <td class="num">${fmt(r.surchargePercent)}</td>
+      <td>${escapeHtml(r.accountType)}</td>
+      <td>${escapeHtml((r.effectiveDate || '').slice(0, 10))}</td>
+      <td>${escapeHtml((r.endDate || '').slice(0, 10))}</td>
+      <td>${escapeHtml(r.notes)}</td>
+    </tr>`).join('') + '</tbody>';
+
+  table.innerHTML = head + body;
+  table.querySelectorAll('tbody tr').forEach(tr => {
+    tr.addEventListener('click', () => {
+      const id = Number(tr.getAttribute('data-id'));
+      const rule = state.rules.find(r => r.id === id);
+      if (rule) selectRule(rule);
+    });
+  });
+}
+
+async function saveRule() {
+  const payload = buildRequest();
+  if (!payload.productService) {
+    toast('Product / Service is required', 'error');
+    f.product.focus();
+    return;
+  }
+  // Flat / Run pricing require a numeric rate.
+  if ((payload.pricingType === 'Flat' || payload.pricingType === 'Run')
+      && (payload.rate == null || !Number.isFinite(payload.rate))) {
+    toast(`${payload.pricingType} Rate must be a number`, 'error');
+    f.rate.focus();
+    return;
+  }
+  // Hauling needs an Overage Rate; without it CalculateAmount returns $0 forever.
+  if (payload.pricingType === 'Hauling' && (payload.overageRate == null || !Number.isFinite(payload.overageRate))) {
+    toast('Overage Rate is required for Hauling', 'error');
+    f.overageRate.focus();
+    return;
+  }
+  // For Hauling, the rate column is unused — clear it so we don't shadow overage_rate.
+  if (payload.pricingType === 'Hauling') {
+    payload.rate = 0;
+  }
+
+  const url = state.selectedId
+    ? `/api/pricing/rules/${state.selectedId}`
+    : '/api/pricing/rules';
+  const method = state.selectedId ? 'PUT' : 'POST';
+
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      toast(err.error || 'Save failed', 'error');
+      return;
+    }
+    toast('Saved', 'success');
+    clearForm();
+    await loadRules();
+    await loadDropdowns();
+  } catch {
+    toast('Network error', 'error');
+  }
+}
+
+async function deleteRule() {
+  if (!state.selectedId) return;
+  if (!confirm('Delete this pricing rule?')) return;
+  try {
+    const res = await fetch(`/api/pricing/rules/${state.selectedId}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      toast(err.error || 'Delete failed', 'error');
+      return;
+    }
+    toast('Deleted', 'success');
+    clearForm();
+    await loadRules();
+  } catch {
+    toast('Network error', 'error');
+  }
+}
+
+async function importCsv(file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const res = await fetch('/api/pricing/import', { method: 'POST', body: fd });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      toast(err.error || 'Import failed', 'error');
+      return;
+    }
+    const r = await res.json();
+    let msg = `Imported or updated ${r.imported.toLocaleString()} pricing row(s).`;
+    if (r.skipped > 0) msg += ` Skipped ${r.skipped.toLocaleString()} row(s).`;
+    $('importSummary').textContent = msg;
+    if (Array.isArray(r.errors) && r.errors.length > 0) {
+      $('importErrors').textContent = r.errors.join('\n');
+      $('importErrors').style.display = '';
+    } else {
+      $('importErrors').style.display = 'none';
+    }
+    $('importModal').classList.add('open');
+    await loadRules();
+    await loadDropdowns();
+  } catch {
+    toast('Network error during import', 'error');
+  }
+}
+
+function wireEvents() {
+  $('btnSave').addEventListener('click', saveRule);
+  $('btnNew').addEventListener('click', clearForm);
+  $('btnDelete').addEventListener('click', deleteRule);
+  $('btnCloseImport').addEventListener('click', () => $('importModal').classList.remove('open'));
+  f.pricingType.addEventListener('change', applyPricingTypeMask);
+  $('search').addEventListener('input', e => { state.filter = e.target.value; renderGrid(); });
+  $('fileImport').addEventListener('change', e => {
+    const file = e.target.files?.[0];
+    if (file) importCsv(file);
+    e.target.value = ''; // allow re-upload of same file
+  });
+}
+
+async function init() {
+  wireEvents();
+  applyPricingTypeMask();
+  await Promise.all([loadRules(), loadDropdowns()]);
+}
+init();
+</script>
+</body>
+</html>

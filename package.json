@@ -1,0 +1,12 @@
+{
+  "name": "ais-lan-dashboard",
+  "version": "2.0.0",
+  "private": true,
+  "description": "AIS LAN weighbridge ticketing dashboard - zero-dependency Node + SQLite.",
+  "main": "server.js",
+  "engines": { "node": ">=22.5" },
+  "scripts": {
+    "start": "node --no-warnings server.js",
+    "dev": "node --no-warnings --watch server.js"
+  }
+}

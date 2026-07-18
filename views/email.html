@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Email Export — AIS</title>
+<style>
+  :root {
+    --bg:#f2f3f5; --panel:#fff; --line:#d8dde3; --text:#1c1f24; --muted:#6b7380;
+    --accent:#00c8dc; --orange:#f58220; --green:#3cb446; --slate:#465f82; --error:#b53030;
+    --label:#4a73b8; --warn-bg:#fff7e6; --warn-line:#e8c477;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 "Segoe UI",system-ui,sans-serif; }
+  header.app-bar { background:#1c2330; color:#fff; padding:10px 16px; display:flex; align-items:center; gap:12px; position:sticky; top:0; z-index:20; }
+  header.app-bar h1 { font-size:16px; margin:0; font-weight:600; letter-spacing:.5px; }
+  header.app-bar a.back { color:#a3b1c2; text-decoration:none; font-size:13px; margin-left:auto; }
+  header.app-bar a.back:hover { color:#fff; }
+  main { max-width:760px; margin:0 auto; padding:16px; }
+  section.panel { background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:16px; margin-bottom:14px; }
+  section.panel h2 { margin:0 0 12px; font-size:13px; color:var(--label); text-transform:uppercase; letter-spacing:.6px; border-bottom:1px solid var(--line); padding-bottom:6px; }
+  .row { display:grid; gap:12px; }
+  .row.cols-2 { grid-template-columns:1fr 1fr; }
+  .row.cols-3 { grid-template-columns:2fr 1fr 1fr; }
+  label.field { display:block; margin-bottom:10px; }
+  label.field > .lbl { display:block; color:var(--label); font-size:11px; text-transform:uppercase; letter-spacing:.5px; margin-bottom:3px; font-weight:600; }
+  input[type=text], input[type=number], input[type=password], input[type=email], input[type=date], select {
+    width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:4px; background:#fff; font:inherit; color:var(--text);
+  }
+  input:focus, select:focus { outline:2px solid var(--accent); outline-offset:-1px; border-color:var(--accent); }
+  .checks { display:flex; flex-wrap:wrap; gap:18px; padding:4px 0; }
+  .checks label { display:inline-flex; align-items:center; gap:6px; cursor:pointer; }
+  .checks input { width:18px; height:18px; }
+  .actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+  button.btn { border:0; border-radius:4px; padding:10px 18px; color:#fff; font:700 13px "Segoe UI",sans-serif; text-transform:uppercase; letter-spacing:.4px; cursor:pointer; min-height:44px; }
+  button.btn:disabled { opacity:.45; cursor:not-allowed; }
+  button.btn.primary { background:var(--accent); }
+  button.btn.orange { background:var(--orange); }
+  button.btn.slate { background:var(--slate); }
+  button.btn.ghost { background:transparent; color:var(--slate); border:1px solid var(--line); }
+  .hint { font-size:12px; color:var(--muted); margin-top:4px; }
+  .note { background:var(--warn-bg); border:1px solid var(--warn-line); border-radius:5px; padding:10px 12px; font-size:12.5px; color:#6b5418; margin-bottom:14px; }
+  .note b { color:#5a4510; }
+  .status { font-size:13px; margin-top:8px; min-height:1.3em; }
+  .status.ok { color:var(--green); }
+  .status.err { color:var(--error); }
+  .status.busy { color:var(--slate); }
+  .day-summary { font-size:13px; color:var(--muted); margin:6px 0 10px; }
+  code { background:#eef1f5; padding:1px 5px; border-radius:3px; font-size:12px; }
+</style>
+</head>
+<body>
+<header class="app-bar">
+  <h1>EMAIL EXPORT</h1>
+  <a href="/" class="back">‹ Dashboard</a>
+</header>
+
+<main>
+  <div class="note">
+    <b>How this works:</b> the database and dashboard run fully offline on this computer.
+    Email is the only feature that needs the internet, and only at the moment you click
+    <b>Send</b>. Tip: use a dedicated <b>app password</b> (Gmail / Office&nbsp;365) rather than the
+    account's real password — most providers require it and it limits exposure.
+  </div>
+
+  <section class="panel">
+    <h2>SMTP Settings</h2>
+    <div class="row cols-3">
+      <label class="field"><span class="lbl">SMTP Host</span>
+        <input type="text" id="host" placeholder="smtp.office365.com" autocomplete="off"></label>
+      <label class="field"><span class="lbl">Port</span>
+        <input type="number" id="port" value="587"></label>
+      <label class="field"><span class="lbl">Security</span>
+        <select id="secure">
+          <option value="false">STARTTLS (587)</option>
+          <option value="true">SSL/TLS (465)</option>
+        </select></label>
+    </div>
+    <div class="row cols-2">
+      <label class="field"><span class="lbl">Username</span>
+        <input type="text" id="username" placeholder="scale@aisdisposal.com" autocomplete="off"></label>
+      <label class="field"><span class="lbl">Password / App Password</span>
+        <input type="password" id="password" placeholder="leave blank to keep saved" autocomplete="new-password">
+        <div class="hint" id="pwHint"></div></label>
+    </div>
+    <div class="row cols-2">
+      <label class="field"><span class="lbl">From Address</span>
+        <input type="text" id="from" placeholder="scale@aisdisposal.com"></label>
+      <label class="field"><span class="lbl">To (comma-separated)</span>
+        <input type="text" id="to" placeholder="office@aisdisposal.com"></label>
+    </div>
+    <label class="field"><span class="lbl">Subject Prefix</span>
+      <input type="text" id="subjectPrefix" value="AIS Daily Tickets"></label>
+    <div class="checks">
+      <label><input type="checkbox" id="tlsInsecure"> Allow self-signed / internal mail server (skip cert check)</label>
+    </div>
+    <div class="actions">
+      <button type="button" class="btn primary" id="btnSave">Save Settings</button>
+      <button type="button" class="btn slate" id="btnTest">Send Test Email</button>
+    </div>
+    <div class="status" id="settingsStatus"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Automatic Daily Email</h2>
+    <div class="checks" style="margin-bottom:10px;">
+      <label><input type="checkbox" id="autoSendEnabled"> Email a CSV automatically every day</label>
+    </div>
+    <div class="row cols-2">
+      <label class="field"><span class="lbl">Send at (this computer's time)</span>
+        <input type="time" id="autoSendTime" value="18:00"></label>
+      <label class="field"><span class="lbl">Which day's tickets</span>
+        <select id="autoSendWhich">
+          <option value="today">That same day (e.g. end of business)</option>
+          <option value="yesterday">The previous day (e.g. early-morning run)</option>
+        </select></label>
+    </div>
+    <div class="checks">
+      <label><input type="checkbox" id="skipEmptyDays"> Don't send on days with zero tickets</label>
+    </div>
+    <div class="actions">
+      <button type="button" class="btn primary" id="btnSaveAuto">Save Schedule</button>
+    </div>
+    <div class="hint" style="margin-top:8px;">
+      The schedule runs inside the dashboard, so this computer must be on and the dashboard
+      running at the scheduled time. If it was off, it catches up when it next starts that day.
+    </div>
+    <div class="status" id="autoStatus"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Email a Day's Tickets</h2>
+    <label class="field" style="max-width:220px;"><span class="lbl">Date</span>
+      <input type="date" id="dayDate"></label>
+    <div class="day-summary" id="daySummary">—</div>
+    <div class="actions">
+      <button type="button" class="btn orange" id="btnEmailDay">Email This Day's CSV</button>
+      <button type="button" class="btn ghost" id="btnDownloadDay">Download CSV (offline)</button>
+    </div>
+    <div class="status" id="dayStatus"></div>
+  </section>
+</main>
+
+<script src="/auth.js"></script>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+
+function setStatus(el, msg, kind) {
+  el.className = 'status ' + (kind || '');
+  el.textContent = msg;
+}
+
+async function loadSettings() {
+  try {
+    const res = await fetch('/api/email/settings');
+    const c = await res.json();
+    $('host').value = c.host || '';
+    $('port').value = c.port || 587;
+    $('secure').value = String(!!c.secure);
+    $('username').value = c.username || '';
+    $('from').value = c.from || '';
+    $('to').value = c.to || '';
+    $('subjectPrefix').value = c.subjectPrefix || 'AIS Daily Tickets';
+    $('tlsInsecure').checked = !!c.tlsInsecure;
+    $('pwHint').textContent = c.passwordFromEnv
+      ? 'Using password from AIS_SMTP_PASSWORD environment variable.'
+      : (c.hasPassword ? 'A password is saved. Leave blank to keep it.' : 'No password saved yet.');
+    $('autoSendEnabled').checked = !!c.autoSendEnabled;
+    $('autoSendTime').value = c.autoSendTime || '18:00';
+    $('autoSendWhich').value = c.autoSendWhich || 'today';
+    $('skipEmptyDays').checked = !!c.skipEmptyDays;
+    if (c.autoLastResult) {
+      const kind = /^ok/i.test(c.autoLastResult) ? 'ok' : (/^error/i.test(c.autoLastResult) ? 'err' : '');
+      setStatus($('autoStatus'), 'Last run: ' + c.autoLastResult, kind);
+    } else {
+      setStatus($('autoStatus'), c.autoSendEnabled ? 'Scheduled. No automatic send has run yet.' : '', '');
+    }
+  } catch (e) {
+    setStatus($('settingsStatus'), 'Could not load settings: ' + e.message, 'err');
+  }
+}
+
+function gatherSettings() {
+  return {
+    host: $('host').value.trim(),
+    port: Number($('port').value) || 587,
+    secure: $('secure').value === 'true',
+    username: $('username').value.trim(),
+    password: $('password').value,           // blank = keep existing (server honors this)
+    from: $('from').value.trim(),
+    to: $('to').value.trim(),
+    subjectPrefix: $('subjectPrefix').value.trim(),
+    tlsInsecure: $('tlsInsecure').checked,
+    autoSendEnabled: $('autoSendEnabled').checked,
+    autoSendTime: $('autoSendTime').value || '18:00',
+    autoSendWhich: $('autoSendWhich').value,
+    skipEmptyDays: $('skipEmptyDays').checked
+  };
+}
+
+async function saveSettings() {
+  setStatus($('settingsStatus'), 'Saving…', 'busy');
+  try {
+    const res = await fetch('/api/email/settings', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(gatherSettings())
+    });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'HTTP ' + res.status); }
+    $('password').value = '';
+    await loadSettings();
+    setStatus($('settingsStatus'), 'Saved.', 'ok');
+    return true;
+  } catch (e) {
+    setStatus($('settingsStatus'), 'Save failed: ' + e.message, 'err');
+    return false;
+  }
+}
+
+async function sendTest() {
+  if (!(await saveSettings())) return;
+  setStatus($('settingsStatus'), 'Sending test email… (needs internet)', 'busy');
+  try {
+    const res = await fetch('/api/email/test', { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+    setStatus($('settingsStatus'), 'Test sent to ' + data.to + ' ✓', 'ok');
+  } catch (e) {
+    setStatus($('settingsStatus'), e.message, 'err');
+  }
+}
+
+async function refreshDaySummary() {
+  const date = $('dayDate').value;
+  try {
+    const res = await fetch('/api/day?date=' + encodeURIComponent(date));
+    const d = await res.json();
+    const amt = (d.amount && d.amount.net != null) ? d.amount.net : 0;
+    $('daySummary').textContent = `${d.ticketCount} ticket${d.ticketCount === 1 ? '' : 's'} on ${d.date} · net $${Number(amt).toFixed(2)}`;
+  } catch {
+    $('daySummary').textContent = '—';
+  }
+}
+
+async function emailDay() {
+  setStatus($('dayStatus'), 'Sending… (needs internet)', 'busy');
+  try {
+    const res = await fetch('/api/email/send-day', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: $('dayDate').value })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+    setStatus($('dayStatus'), `Emailed ${data.count} ticket(s) for ${data.date} to ${data.to} ✓`, 'ok');
+  } catch (e) {
+    setStatus($('dayStatus'), e.message, 'err');
+  }
+}
+
+function downloadDay() {
+  const date = $('dayDate').value;
+  // aisDownload (from auth.js) carries the token header and triggers a file save.
+  window.aisDownload('/api/export/day.csv?date=' + encodeURIComponent(date), 'tickets_' + date.replace(/-/g, '') + '.csv')
+    .then(() => setStatus($('dayStatus'), 'CSV downloaded.', 'ok'))
+    .catch(e => setStatus($('dayStatus'), e.message, 'err'));
+}
+
+$('btnSave').addEventListener('click', saveSettings);
+$('btnTest').addEventListener('click', sendTest);
+$('btnSaveAuto').addEventListener('click', async () => {
+  setStatus($('autoStatus'), 'Saving schedule…', 'busy');
+  if (await saveSettings()) {
+    setStatus($('autoStatus'), $('autoSendEnabled').checked
+      ? `Schedule saved: daily at ${$('autoSendTime').value}.`
+      : 'Automatic email turned off.', 'ok');
+  }
+});
+$('btnEmailDay').addEventListener('click', emailDay);
+$('btnDownloadDay').addEventListener('click', downloadDay);
+$('dayDate').addEventListener('change', refreshDaySummary);
+
+(function init() {
+  $('dayDate').valueAsDate = new Date();
+  loadSettings();
+  refreshDaySummary();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AR Billing Export — AIS</title>
+<style>
+  :root {
+    --bg: #f2f3f5;
+    --panel: #ffffff;
+    --line: #d8dde3;
+    --text: #1c1f24;
+    --muted: #6b7380;
+    --accent: #00c8dc;
+    --accent-hover: #00aebf;
+    --orange: #f58220;
+    --slate: #465f82;
+    --label: #4a73b8;
+    --error: #b53030;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
+  body { font: 14px/1.4 "Segoe UI", system-ui, -apple-system, sans-serif; }
+
+  header.app-bar {
+    background: #1c2330;
+    color: #fff;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
+  header.app-bar h1 { font-size: 16px; margin: 0; font-weight: 600; letter-spacing: 0.5px; }
+  header.app-bar .sub { color: #a3b1c2; font-size: 12px; margin-left: auto; }
+  header.app-bar a.back { color: #a3b1c2; text-decoration: none; font-size: 12px; }
+  header.app-bar a.back:hover { color: #fff; }
+
+  main { padding: 16px; max-width: 1400px; margin: 0 auto; }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+  }
+  .controls label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--label); font-weight: 600; }
+  .controls input[type=date] {
+    padding: 6px 8px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    font: inherit;
+  }
+  .controls .spacer { flex: 1; }
+  .controls .status { color: var(--muted); font-size: 13px; }
+
+  button.btn {
+    border: 0;
+    border-radius: 4px;
+    padding: 8px 14px;
+    color: #fff;
+    font: 600 13px "Segoe UI", system-ui, sans-serif;
+    cursor: pointer;
+  }
+  button.btn:disabled, a.btn[aria-disabled=true] { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
+  button.btn.primary, a.btn.primary { background: var(--accent); }
+  button.btn.primary:hover, a.btn.primary:hover { background: var(--accent-hover); }
+  button.btn.slate, a.btn.slate { background: var(--slate); color: #fff; }
+  a.btn { display: inline-block; text-decoration: none; padding: 8px 14px; border-radius: 4px; font: 600 13px "Segoe UI", system-ui, sans-serif; }
+
+  .tabs { display: flex; gap: 2px; border-bottom: 2px solid var(--line); margin-bottom: 0; }
+  .tabs button {
+    background: transparent;
+    border: 0;
+    padding: 10px 16px;
+    cursor: pointer;
+    color: var(--muted);
+    font: 600 13px "Segoe UI", system-ui, sans-serif;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+  }
+  .tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-top: 0;
+    border-radius: 0 0 6px 6px;
+    padding: 0;
+    overflow: auto;
+    max-height: calc(100vh - 240px);
+  }
+
+  table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.grid th, table.grid td { padding: 7px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  table.grid th { background: #f8f9fb; font-weight: 600; color: var(--label); text-align: left; position: sticky; top: 0; z-index: 1; }
+  table.grid td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  table.grid tbody tr:hover { background: #f3f7ff; }
+  table.grid tfoot td { background: #f8f9fb; font-weight: 600; }
+  .empty { padding: 32px; text-align: center; color: var(--muted); font-style: italic; }
+
+  .toast {
+    position: fixed; top: 60px; right: 16px;
+    background: var(--slate); color: #fff;
+    padding: 12px 16px; border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    z-index: 100; max-width: 360px;
+    opacity: 0; transform: translateY(-10px);
+    transition: opacity 0.2s, transform 0.2s;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.error { background: var(--error); }
+</style>
+</head>
+<body>
+
+<header class="app-bar">
+  <h1>AR BILLING EXPORT</h1>
+  <a href="/" class="back">‹ Dashboard</a>
+  <span class="sub" id="modeLabel"></span>
+</header>
+
+<main>
+
+  <div class="controls">
+    <label>From <input type="date" id="fFrom"></label>
+    <label>To <input type="date" id="fTo"></label>
+    <button class="btn primary" id="btnPreview">Preview</button>
+    <button class="btn slate" id="btnExportDetail" disabled>Export Detail CSV</button>
+    <button class="btn slate" id="btnExportTotals" disabled>Export Totals CSV</button>
+    <button class="btn slate" id="btnExportQb" disabled>Export AR (QuickBooks)</button>
+    <span class="spacer"></span>
+    <span class="status" id="statusLabel">Pick a date range and click Preview.</span>
+  </div>
+
+  <div class="tabs">
+    <button id="tabDetail" class="active" data-tab="detail">Ticket Detail</button>
+    <button id="tabTotals" data-tab="totals">Customer Totals</button>
+  </div>
+
+  <div class="panel" id="panelDetail">
+    <div class="empty" id="emptyDetail">No AR tickets loaded yet.</div>
+    <table class="grid" id="gridDetail" style="display:none;"></table>
+  </div>
+
+  <div class="panel" id="panelTotals" style="display:none;">
+    <div class="empty" id="emptyTotals">No customer totals loaded yet.</div>
+    <table class="grid" id="gridTotals" style="display:none;"></table>
+  </div>
+
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script src="/auth.js"></script>
+<script>
+'use strict';
+
+const $ = id => document.getElementById(id);
+
+// Schema for each grid. `key` is the camelCase field returned by /api/billing/ar
+// (DashboardDb.ToRecord lower-cases the first segment of snake_case columns); `numeric`
+// columns format to 2 decimals and right-align. Keep these aligned with the DataTable
+// column names declared in Database.LoadArBillingTickets / LoadArBillingCustomerTotals.
+const detailColumns = [
+  { key: 'customer', label: 'Customer' },
+  { key: 'date', label: 'Date' },
+  { key: 'ticketNo', label: 'Ticket #' },
+  { key: 'invoiceNo', label: 'Invoice #' },
+  { key: 'truck', label: 'Truck' },
+  { key: 'product', label: 'Product' },
+  { key: 'tons', label: 'Tons', numeric: true },
+  { key: 'rate', label: 'Rate', numeric: true },
+  { key: 'amount', label: 'Amount', numeric: true },
+  { key: 'arAmount', label: 'AR Amount', numeric: true },
+  { key: 'payment', label: 'Payment' },
+  { key: 'city', label: 'City' },
+  { key: 'origin', label: 'Origin' },
+  { key: 'wasteOrigin', label: 'Waste Origin' },
+  { key: 'memo', label: 'Memo' },
+];
+
+const totalsColumns = [
+  { key: 'customer', label: 'Customer' },
+  { key: 'ticketCount', label: 'Tickets', numeric: true, decimals: 0 },
+  { key: 'totalTons', label: 'Total Tons', numeric: true },
+  { key: 'totalAmount', label: 'Total Amount', numeric: true },
+  { key: 'firstDate', label: 'First Date' },
+  { key: 'lastDate', label: 'Last Date' },
+];
+
+const toast = (msg, kind = '') => {
+  const el = $('toast');
+  el.textContent = msg;
+  el.className = 'toast show ' + kind;
+  setTimeout(() => { el.className = 'toast ' + kind; }, 2400);
+};
+
+function fmtNum(n, decimals = 2) {
+  if (n == null || n === '') return '';
+  const x = Number(n);
+  if (!Number.isFinite(x)) return '';
+  return x.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
+function renderGrid(table, rows, schema, grandTotal) {
+  if (!rows || rows.length === 0) {
+    table.style.display = 'none';
+    return false;
+  }
+  const head = '<thead><tr>' + schema.map(c => `<th class="${c.numeric ? 'num' : ''}">${c.label}</th>`).join('') + '</tr></thead>';
+  const body = '<tbody>' + rows.map(r => '<tr>' + schema.map(c => {
+    const val = r[c.key];
+    if (c.numeric) return `<td class="num">${fmtNum(val, c.decimals ?? 2)}</td>`;
+    return `<td>${val == null ? '' : escapeHtml(String(val))}</td>`;
+  }).join('') + '</tr>').join('') + '</tbody>';
+
+  let foot = '';
+  if (grandTotal != null) {
+    // Sum row spans all but the last numeric column; the grand total drops into the
+    // amount-style column so it lines up visually with the per-row values above.
+    const lastNumericIdx = schema.map((c, i) => c.numeric ? i : -1).filter(i => i >= 0).pop();
+    if (lastNumericIdx != null && lastNumericIdx >= 0) {
+      const cells = schema.map((c, i) => {
+        if (i === lastNumericIdx) return `<td class="num">${fmtNum(grandTotal, 2)}</td>`;
+        if (i === lastNumericIdx - 1) return `<td style="text-align:right;font-weight:600;">Total</td>`;
+        return `<td></td>`;
+      }).join('');
+      foot = `<tfoot><tr>${cells}</tr></tfoot>`;
+    }
+  }
+
+  table.innerHTML = head + body + foot;
+  table.style.display = '';
+  return true;
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function activeTab() {
+  return document.querySelector('.tabs button.active').getAttribute('data-tab');
+}
+
+function switchTab(which) {
+  document.querySelectorAll('.tabs button').forEach(b => {
+    b.classList.toggle('active', b.getAttribute('data-tab') === which);
+  });
+  $('panelDetail').style.display = which === 'detail' ? '' : 'none';
+  $('panelTotals').style.display = which === 'totals' ? '' : 'none';
+}
+
+async function runPreview() {
+  const from = $('fFrom').value;
+  const to = $('fTo').value;
+  if (!from || !to) { toast('Pick both dates', 'error'); return; }
+  if (from > to) { toast('From must be on or before To', 'error'); return; }
+
+  $('statusLabel').textContent = 'Loading…';
+  $('btnExportDetail').setAttribute('aria-disabled', 'true');
+  $('btnExportTotals').setAttribute('aria-disabled', 'true');
+  $('btnExportQb').setAttribute('aria-disabled', 'true');
+
+  try {
+    const res = await fetch(`/api/billing/ar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      toast(err.error || 'Failed to load', 'error');
+      $('statusLabel').textContent = 'Failed to load.';
+      return;
+    }
+    const data = await res.json();
+
+    const hasDetail = renderGrid($('gridDetail'), data.detail, detailColumns, data.grandTotal);
+    const hasTotals = renderGrid($('gridTotals'), data.totals, totalsColumns, data.grandTotal);
+    $('emptyDetail').style.display = hasDetail ? 'none' : '';
+    $('emptyTotals').style.display = hasTotals ? 'none' : '';
+
+    $('statusLabel').textContent = `${data.detail.length.toLocaleString()} AR ticket(s), ${data.totals.length.toLocaleString()} customer(s), total $${fmtNum(data.grandTotal, 2)}`;
+
+    // Store the active query string so the Export buttons download the matching
+    // range. They go through aisDownload() (defined in auth.js) so the X-AIS-Token
+    // header rides along — we can't put it on an <a href> link.
+    state.activeFrom = from;
+    state.activeTo = to;
+    $('btnExportDetail').disabled = !hasDetail;
+    $('btnExportTotals').disabled = !hasTotals;
+    $('btnExportQb').disabled = !hasDetail;
+  } catch (err) {
+    toast('Network error', 'error');
+    $('statusLabel').textContent = 'Network error.';
+  }
+}
+
+async function downloadCsv(kind) {
+  if (!state.activeFrom || !state.activeTo) return;
+  const qs = `?from=${encodeURIComponent(state.activeFrom)}&to=${encodeURIComponent(state.activeTo)}&kind=${kind}`;
+  const baseName = kind === 'detail' ? 'ar_billing_detail'
+    : kind === 'totals' ? 'ar_billing_totals'
+    : 'ar_quickbooks';
+  const stamp = `${state.activeFrom.replace(/-/g, '')}_${state.activeTo.replace(/-/g, '')}`;
+  try {
+    await window.aisDownload(`/api/billing/ar.csv${qs}`, `${baseName}_${stamp}.csv`);
+  } catch (err) {
+    toast(err.message || 'Download failed', 'error');
+  }
+}
+
+function init() {
+  const today = new Date();
+  const first = new Date(today.getFullYear(), today.getMonth(), 1);
+  $('fFrom').valueAsDate = first;
+  $('fTo').valueAsDate = today;
+
+  $('btnPreview').addEventListener('click', runPreview);
+  $('btnExportDetail').addEventListener('click', () => downloadCsv('detail'));
+  $('btnExportTotals').addEventListener('click', () => downloadCsv('totals'));
+  $('btnExportQb').addEventListener('click', () => downloadCsv('quickbooks'));
+  document.querySelectorAll('.tabs button').forEach(b => {
+    b.addEventListener('click', () => switchTab(b.getAttribute('data-tab')));
+  });
+
+  runPreview();
+}
+init();
+</script>
+</body>
+</html>

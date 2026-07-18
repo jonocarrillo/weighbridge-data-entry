@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Trucks — AIS</title>
+<style>
+  :root {
+    --bg: #f2f3f5;
+    --panel: #ffffff;
+    --line: #d8dde3;
+    --text: #1c1f24;
+    --muted: #6b7380;
+    --accent: #00c8dc;
+    --accent-hover: #00aebf;
+    --orange: #f58220;
+    --green: #3cb446;
+    --slate: #465f82;
+    --label: #4a73b8;
+    --error: #b53030;
+    --info-bg: #e8f4ff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
+  body { font: 14px/1.4 "Segoe UI", system-ui, -apple-system, sans-serif; }
+
+  header.app-bar {
+    background: #1c2330;
+    color: #fff;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
+  header.app-bar h1 { font-size: 16px; margin: 0; font-weight: 600; letter-spacing: 0.5px; }
+  header.app-bar a.back { color: #a3b1c2; text-decoration: none; font-size: 12px; margin-left: auto; }
+  header.app-bar a.back:hover { color: #fff; }
+
+  main { padding: 16px; max-width: 1200px; margin: 0 auto; }
+
+  .layout { display: grid; grid-template-columns: minmax(0, 380px) 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 1023px) { .layout { grid-template-columns: 1fr; } }
+
+  section.panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 14px;
+  }
+  section.panel h2 {
+    margin: 0 0 12px;
+    font-size: 13px;
+    color: var(--label);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 6px;
+  }
+
+  label.field { display: block; margin-bottom: 10px; }
+  label.field > .lbl {
+    display: block;
+    color: var(--label);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 3px;
+    font-weight: 600;
+  }
+  label.field input, label.field textarea {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: #fff;
+    font: inherit;
+    color: var(--text);
+  }
+  label.field input.numeric { text-align: right; font-variant-numeric: tabular-nums; }
+  .form-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+
+  button.btn {
+    border: 0; border-radius: 4px;
+    padding: 9px 16px;
+    color: #fff;
+    font: 600 13px "Segoe UI", system-ui, sans-serif;
+    cursor: pointer;
+  }
+  button.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.btn.primary { background: var(--accent); }
+  button.btn.primary:hover { background: var(--accent-hover); }
+  button.btn.danger { background: var(--error); }
+  button.btn.ghost { background: transparent; color: var(--slate); border: 1px solid var(--line); }
+  button.btn.ghost:hover { background: #f7f8fa; }
+
+  .grid-wrap { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .grid-head {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .grid-head input.search {
+    flex: 1;
+    padding: 7px 10px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    font: inherit;
+  }
+  .grid-head .count { color: var(--muted); font-size: 12px; }
+  .table-scroll { max-height: calc(100vh - 220px); overflow: auto; }
+
+  table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.grid th, table.grid td { padding: 7px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  table.grid th { background: #f8f9fb; font-weight: 600; color: var(--label); text-align: left; position: sticky; top: 0; z-index: 1; }
+  table.grid td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  table.grid tbody tr { cursor: pointer; }
+  table.grid tbody tr:hover { background: #f3f7ff; }
+  table.grid tbody tr.selected { background: var(--info-bg); }
+  .empty { padding: 32px; text-align: center; color: var(--muted); font-style: italic; }
+
+  .toast {
+    position: fixed; top: 60px; right: 16px;
+    background: var(--slate); color: #fff;
+    padding: 12px 16px; border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    z-index: 100; max-width: 360px;
+    opacity: 0; transform: translateY(-10px);
+    transition: opacity 0.2s, transform 0.2s;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.error { background: var(--error); }
+  .toast.success { background: var(--green); }
+</style>
+</head>
+<body>
+
+<header class="app-bar">
+  <h1>TRUCKS</h1>
+  <a href="/" class="back">‹ Dashboard</a>
+</header>
+
+<main>
+<div class="layout">
+
+  <section class="panel">
+    <h2 id="formTitle">New Truck</h2>
+
+    <label class="field">
+      <span class="lbl">Truck ID *</span>
+      <input type="text" id="fTruckId" autocomplete="off">
+    </label>
+
+    <label class="field">
+      <span class="lbl">Tare Weight (lb)</span>
+      <input type="text" id="fTare" inputmode="decimal" class="numeric">
+    </label>
+
+    <label class="field">
+      <span class="lbl">Company / Hauler</span>
+      <input type="text" id="fCompany">
+    </label>
+
+    <label class="field">
+      <span class="lbl">Notes</span>
+      <input type="text" id="fNotes">
+    </label>
+
+    <div class="form-actions">
+      <button class="btn primary" id="btnSave">Save</button>
+      <button class="btn ghost" id="btnNew">New</button>
+      <button class="btn danger" id="btnDelete" disabled>Delete</button>
+    </div>
+  </section>
+
+  <div class="grid-wrap">
+    <div class="grid-head">
+      <input class="search" id="search" placeholder="Filter trucks by ID / company…">
+      <span class="count" id="truckCount">0 trucks</span>
+    </div>
+    <div class="table-scroll">
+      <div class="empty" id="emptyGrid">No trucks yet — add one on the left.</div>
+      <table class="grid" id="grid" style="display:none;"></table>
+    </div>
+  </div>
+
+</div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script src="/auth.js"></script>
+<script>
+'use strict';
+
+const $ = id => document.getElementById(id);
+
+const state = {
+  trucks: [],
+  filter: '',
+  selectedId: null,
+};
+
+const f = {
+  truckId: $('fTruckId'),
+  tare: $('fTare'),
+  company: $('fCompany'),
+  notes: $('fNotes'),
+};
+
+const toast = (msg, kind = '') => {
+  const el = $('toast');
+  el.textContent = msg;
+  el.className = 'toast show ' + kind;
+  setTimeout(() => { el.className = 'toast ' + kind; }, 2400);
+};
+
+function parseNumber(text) {
+  if (text == null || text === '') return null;
+  const cleaned = String(text).replace(/[$,]/g, '').trim();
+  const n = parseFloat(cleaned);
+  return Number.isFinite(n) ? n : null;
+}
+
+function fmtLb(n) {
+  if (n == null || n === '') return '';
+  const x = Number(n);
+  if (!Number.isFinite(x)) return '';
+  return x.toLocaleString('en-US', { maximumFractionDigits: 0 });
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function clearForm() {
+  state.selectedId = null;
+  f.truckId.value = '';
+  f.tare.value = '';
+  f.company.value = '';
+  f.notes.value = '';
+  $('formTitle').textContent = 'New Truck';
+  $('btnDelete').disabled = true;
+  document.querySelectorAll('#grid tbody tr.selected').forEach(r => r.classList.remove('selected'));
+  f.truckId.focus();
+}
+
+function selectTruck(t) {
+  state.selectedId = t.id;
+  f.truckId.value = t.truckId ?? '';
+  f.tare.value = t.tareWeight != null ? Number(t.tareWeight) : '';
+  f.company.value = t.company ?? '';
+  f.notes.value = t.notes ?? '';
+  $('formTitle').textContent = `Edit Truck (id=${t.id})`;
+  $('btnDelete').disabled = false;
+  document.querySelectorAll('#grid tbody tr.selected').forEach(r => r.classList.remove('selected'));
+  const tr = document.querySelector(`#grid tbody tr[data-id="${t.id}"]`);
+  if (tr) tr.classList.add('selected');
+}
+
+function buildRequest() {
+  return {
+    truckId: f.truckId.value.trim() || null,
+    tareWeight: parseNumber(f.tare.value),
+    company: f.company.value.trim() || null,
+    notes: f.notes.value.trim() || null,
+  };
+}
+
+async function loadTrucks() {
+  const res = await fetch('/api/trucks');
+  if (!res.ok) { toast('Failed to load trucks', 'error'); return; }
+  state.trucks = await res.json();
+  renderGrid();
+}
+
+function renderGrid() {
+  const term = state.filter.trim().toLowerCase();
+  const rows = !term ? state.trucks : state.trucks.filter(t => {
+    return (t.truckId || '').toLowerCase().includes(term)
+        || (t.company || '').toLowerCase().includes(term);
+  });
+
+  $('truckCount').textContent = `${rows.length} of ${state.trucks.length} truck${state.trucks.length === 1 ? '' : 's'}`;
+
+  const table = $('grid');
+  if (rows.length === 0) {
+    table.style.display = 'none';
+    $('emptyGrid').style.display = '';
+    $('emptyGrid').textContent = state.trucks.length === 0
+      ? 'No trucks yet — add one on the left.'
+      : 'No trucks match the filter.';
+    return;
+  }
+  $('emptyGrid').style.display = 'none';
+  table.style.display = '';
+
+  const head = `<thead><tr>
+    <th>Truck ID</th><th class="num">Tare (lb)</th><th>Company</th><th>Notes</th>
+  </tr></thead>`;
+
+  const body = '<tbody>' + rows.map(t => `
+    <tr data-id="${t.id}" ${t.id === state.selectedId ? 'class="selected"' : ''}>
+      <td>${escapeHtml(t.truckId)}</td>
+      <td class="num">${fmtLb(t.tareWeight)}</td>
+      <td>${escapeHtml(t.company)}</td>
+      <td>${escapeHtml(t.notes)}</td>
+    </tr>`).join('') + '</tbody>';
+
+  table.innerHTML = head + body;
+  table.querySelectorAll('tbody tr').forEach(tr => {
+    tr.addEventListener('click', () => {
+      const id = Number(tr.getAttribute('data-id'));
+      const truck = state.trucks.find(x => x.id === id);
+      if (truck) selectTruck(truck);
+    });
+  });
+}
+
+async function saveTruck() {
+  const payload = buildRequest();
+  if (!payload.truckId) {
+    toast('Truck ID is required', 'error');
+    f.truckId.focus();
+    return;
+  }
+  const url = state.selectedId ? `/api/trucks/${state.selectedId}` : '/api/trucks';
+  const method = state.selectedId ? 'PUT' : 'POST';
+
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      toast(err.error || 'Save failed', 'error');
+      return;
+    }
+    toast('Saved', 'success');
+    clearForm();
+    await loadTrucks();
+  } catch {
+    toast('Network error', 'error');
+  }
+}
+
+async function deleteTruck() {
+  if (!state.selectedId) return;
+  if (!confirm('Delete this truck?')) return;
+  try {
+    const res = await fetch(`/api/trucks/${state.selectedId}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      toast(err.error || 'Delete failed', 'error');
+      return;
+    }
+    toast('Deleted', 'success');
+    clearForm();
+    await loadTrucks();
+  } catch {
+    toast('Network error', 'error');
+  }
+}
+
+function wireEvents() {
+  $('btnSave').addEventListener('click', saveTruck);
+  $('btnNew').addEventListener('click', clearForm);
+  $('btnDelete').addEventListener('click', deleteTruck);
+  $('search').addEventListener('input', e => { state.filter = e.target.value; renderGrid(); });
+}
+
+async function init() {
+  wireEvents();
+  await loadTrucks();
+}
+init();
+</script>
+</body>
+</html>
