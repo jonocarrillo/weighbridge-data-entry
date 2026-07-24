@@ -1602,8 +1602,7 @@ async function handleApi(req, res, url) {
     const target = cleanText(query.get('date')) || todayIso();
     return json(res, 200, buildDaySummary(loadTickets(db), target));
   }
-  // User-editable dashboard config (tracker cards, day-panel rows, highlight
-  // card customer), shared across all LAN devices.
+  // User-editable dashboard config (KPI strip, tracker cards, …), shared on LAN.
   if (req.method === 'GET' && pathname === '/api/dashboard/cards') {
     let cfg = {};
     try { cfg = JSON.parse(getSetting(db, 'dashboard_cards') || '{}'); } catch {}
@@ -1611,6 +1610,7 @@ async function handleApi(req, res, url) {
     if (!cfg || typeof cfg !== 'object') cfg = {};
     return json(res, 200, {
       cards: Array.isArray(cfg.cards) ? cfg.cards : [],
+      kpis: Array.isArray(cfg.kpis) ? cfg.kpis : null,      // null = never configured → seed defaults client-side
       dayCustomers: Array.isArray(cfg.dayCustomers) ? cfg.dayCustomers : null,
       highlight: cfg.highlight && typeof cfg.highlight === 'object' ? cfg.highlight : null
     });
@@ -1618,13 +1618,28 @@ async function handleApi(req, res, url) {
   if (req.method === 'POST' && pathname === '/api/dashboard/cards') {
     if (!requireToken(req, res)) return;
     const body = await readJson(req);
+    // Preserve fields not sent in this request so KPI saves don't wipe trackers and vice versa.
+    let prev = {};
+    try { prev = JSON.parse(getSetting(db, 'dashboard_cards') || '{}'); } catch {}
+    if (Array.isArray(prev)) prev = { cards: prev };
+    if (!prev || typeof prev !== 'object') prev = {};
     const cfg = {
-      cards: Array.isArray(body.cards) ? body.cards.slice(0, 50) : [],
-      dayCustomers: Array.isArray(body.dayCustomers) ? body.dayCustomers.slice(0, 20) : null,
-      highlight: body.highlight && typeof body.highlight === 'object' ? body.highlight : null
+      cards: Array.isArray(body.cards) ? body.cards.slice(0, 50)
+        : (Array.isArray(prev.cards) ? prev.cards : []),
+      kpis: Array.isArray(body.kpis) ? body.kpis.slice(0, 20)
+        : (Array.isArray(prev.kpis) ? prev.kpis : null),
+      dayCustomers: body.dayCustomers !== undefined
+        ? (Array.isArray(body.dayCustomers) ? body.dayCustomers.slice(0, 20) : null)
+        : (Array.isArray(prev.dayCustomers) ? prev.dayCustomers : null),
+      highlight: body.highlight !== undefined
+        ? (body.highlight && typeof body.highlight === 'object' ? body.highlight : null)
+        : (prev.highlight && typeof prev.highlight === 'object' ? prev.highlight : null)
     };
     setSetting(db, 'dashboard_cards', JSON.stringify(cfg));
-    return json(res, 200, { saved: cfg.cards.length });
+    return json(res, 200, {
+      saved: cfg.cards.length,
+      kpis: Array.isArray(cfg.kpis) ? cfg.kpis.length : 0
+    });
   }
   if (req.method === 'GET' && pathname === '/api/ticket/defaults') {
     return json(res, 200, {
@@ -1635,9 +1650,28 @@ async function handleApi(req, res, url) {
     });
   }
   if (req.method === 'GET' && pathname === '/api/dropdowns') {
+    // Products: merge historical ticket products + pricing-rule products so the
+    // clickable list stays useful even before many tickets exist.
+    const productSet = new Map();
+    for (const v of distinctValues(db, 'product_service')) {
+      if (v) productSet.set(String(v).toLowerCase(), v);
+    }
+    try {
+      db.prepare(`
+        SELECT DISTINCT product_service AS value
+        FROM pricing
+        WHERE product_service IS NOT NULL AND TRIM(product_service) <> ''
+        ORDER BY product_service COLLATE NOCASE;
+      `).all().forEach(r => {
+        if (r.value) productSet.set(String(r.value).toLowerCase(), r.value);
+      });
+    } catch { /* pricing table empty / missing */ }
+    const products = [...productSet.values()].sort((a, b) =>
+      String(a).localeCompare(String(b), undefined, { sensitivity: 'base' })
+    );
     return json(res, 200, {
       customers: distinctValues(db, 'customer'),
-      products: distinctValues(db, 'product_service'),
+      products,
       cities: distinctValues(db, 'city'),
       origins: distinctValues(db, 'po_origin')
     });

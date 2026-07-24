@@ -27,11 +27,33 @@
     input, select, button { height: 34px; border: 1px solid var(--line); border-radius: 6px; padding: 0 10px; background: #fff; font: inherit; font-size: 13px; }
     button { background: var(--green); border-color: var(--green); color: #fff; font-weight: 700; cursor: pointer; }
     main { padding: 18px 22px 28px; max-width: 1500px; margin: 0 auto; }
-    .kpis { display: grid; grid-template-columns: repeat(5, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .kpi-section { margin-bottom: 16px; }
+    .kpi-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+    .kpi-toolbar strong { font-size: 14px; }
+    .kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
     .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 1px 2px rgba(16,24,40,.06); }
-    .kpi { padding: 16px; }
-    .label { color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-size: 11px; font-weight: 700; }
-    .value { font-size: 26px; font-weight: 800; margin-top: 8px; }
+    .kpi {
+      padding: 16px;
+      position: relative;
+      cursor: grab;
+      min-height: 96px;
+    }
+    .kpi.dragging { opacity: .45; cursor: grabbing; }
+    .kpi.drop-target { outline: 2px dashed #f58220; outline-offset: 2px; }
+    .kpi .label { color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-size: 11px; font-weight: 700; padding-right: 42px; }
+    .kpi .value { font-size: 26px; font-weight: 800; margin-top: 8px; }
+    /* Same always-visible ✎ / ✕ controls as My Trackers */
+    .kpi .t-controls {
+      position: absolute; top: 6px; right: 8px;
+      display: flex; gap: 6px;
+    }
+    .kpi .t-controls button {
+      border: none; background: none; color: #b3bac6;
+      font-size: 14px; cursor: pointer; line-height: 1; padding: 2px; height: auto; width: auto;
+    }
+    .kpi .t-controls .t-del:hover { color: #d33; }
+    .kpi .t-controls .t-edit:hover { color: #f58220; }
+    .kpi-empty { padding: 18px; text-align: center; color: var(--muted); font-style: italic; grid-column: 1 / -1; }
     .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
     .section { padding: 14px; }
     .section h2 { margin: 0 0 12px; font-size: 15px; }
@@ -177,12 +199,12 @@
   <main>
     <div class="error" id="errorBox"></div>
 
-    <section class="kpis">
-      <div class="card kpi"><div class="label">Total Amount</div><div class="value" id="kpiAmount">$0.00</div><div class="muted">Filtered tickets</div></div>
-      <div class="card kpi"><div class="label">AR Total</div><div class="value" id="kpiAr">$0.00</div><div class="muted">Account tickets</div></div>
-      <div class="card kpi"><div class="label">Total Tons</div><div class="value" id="kpiTons">0.00</div><div class="muted">Net tons</div></div>
-      <div class="card kpi"><div class="label">Tickets</div><div class="value" id="kpiTickets">0</div><div class="muted">Current view</div></div>
-      <div class="card kpi"><div class="label">Customers</div><div class="value" id="kpiCustomers">0</div><div class="muted">Unique accounts</div></div>
+    <section class="kpi-section">
+      <div class="kpi-toolbar">
+        <strong>KPI Cards</strong>
+        <button id="addKpiBtn" class="tracker-add" type="button">+ Add KPI</button>
+      </div>
+      <div class="kpis" id="kpiCards"></div>
     </section>
     <section class="card">
       <div class="table-toolbar">
@@ -190,11 +212,25 @@
         <button id="addTrackerBtn" class="tracker-add" type="button">+ Add Card</button>
       </div>
       <div id="trackerBuilder" class="tracker-builder" style="display:none">
+        <select id="tStyle">
+          <option value="kpi">KPI strip (top row)</option>
+          <option value="hl">Highlight card (blue)</option>
+          <option value="compact">Compact card</option>
+          <option value="table">Summary table (full review)</option>
+          <option value="bars-customers">Top customers (bars)</option>
+          <option value="bars-products">Top products (bars)</option>
+          <option value="list">Ticket list</option>
+        </select>
         <select id="tMetric">
           <option value="runs">Runs (ticket count)</option>
           <option value="tons">Tons</option>
           <option value="revenue">Revenue $</option>
           <option value="customers">Unique customers</option>
+          <option value="amount">Total Amount $</option>
+          <option value="ar">AR Total $</option>
+          <option value="tickets">Ticket count</option>
+          <option value="cash">Cash total $</option>
+          <option value="card">Card total $</option>
         </select>
         <select id="tCustomer"><option value="">All customers</option></select>
         <input id="tProduct" placeholder="Product contains (optional)">
@@ -207,15 +243,8 @@
           <option value="date">Specific date…</option>
         </select>
         <input id="tDate" type="date" style="display:none">
-        <select id="tStyle">
-          <option value="hl">Highlight card (blue)</option>
-          <option value="compact">Compact card</option>
-          <option value="table">Summary table (full review)</option>
-          <option value="bars-customers">Top customers (bars)</option>
-          <option value="bars-products">Top products (bars)</option>
-          <option value="list">Ticket list</option>
-        </select>
         <input id="tTitle" placeholder="Card title (optional)">
+        <input id="tSub" placeholder="Subtitle (optional, KPI)">
         <button id="tSave" type="button">Add</button>
         <button id="tCancel" class="ghost" type="button">Cancel</button>
       </div>
@@ -234,8 +263,12 @@
     const number = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
     const $ = id => document.getElementById(id);
     const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-    const today = () => new Date().toISOString().slice(0, 10);
-    const monthStart = () => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10); };
+    // Local calendar date (NOT UTC). toISOString() is UTC and shifts "today"
+    // after ~5pm Pacific, which made Today-Review miss same-day tickets.
+    const localYmd = (d = new Date()) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const today = () => localYmd();
+    const monthStart = () => { const d = new Date(); return localYmd(new Date(d.getFullYear(), d.getMonth(), 1)); };
 
     function filterRows() {
       const from = $('fromDate').value;
@@ -290,15 +323,7 @@
     }
 
     function render() {
-      const rows = filterRows();
-      const totalAmount = rows.reduce((s, r) => s + (r.amount || 0), 0);
-      const arTotal = rows.reduce((s, r) => s + (r.arAmount || 0), 0);
-      const totalTons = rows.reduce((s, r) => s + (r.tons || 0), 0);
-      $('kpiAmount').textContent = money.format(totalAmount);
-      $('kpiAr').textContent = money.format(arTotal);
-      $('kpiTons').textContent = number.format(totalTons);
-      $('kpiTickets').textContent = number.format(rows.length);
-      $('kpiCustomers').textContent = number.format(new Set(rows.map(r => r.customer).filter(Boolean)).size);
+      if (typeof renderKpis === 'function') renderKpis();
       if (typeof renderTrackers === 'function' && $('trackerCards')) renderTrackers();
     }
 
@@ -366,13 +391,30 @@
       }
     }
 
-    // ---- Unified dashboard config: everything is a tracker card ----
+    // ---- One card list for everything: style "kpi" = top strip, else My Trackers ----
     let dashCfg = { cards: [] };
-    let editingIndex = null;   // null = adding; number = editing that card
+    let editingIndex = null;   // null = adding; number = index in trackerCards
+    let trackerCards = [];
 
-    // Default layout: Today review + customer run cards + Top Customers /
-    // Top Products / Ticket Detail (all ordinary draggable tracker cards).
+    const KPI_METRIC_LABEL = {
+      amount: 'Total Amount',
+      ar: 'AR Total',
+      tons: 'Total Tons',
+      tickets: 'Tickets',
+      customers: 'Customers',
+      cash: 'Cash Total',
+      card: 'Card Total',
+      runs: 'Runs',
+      revenue: 'Revenue'
+    };
+
+    // Default layout: top KPI strip + Today review + run cards + charts/list
     const DEFAULT_CARDS = [
+      { style: 'kpi', metric: 'amount', period: 'filter', customer: null, product: null, title: 'Total Amount', sub: 'Filtered tickets' },
+      { style: 'kpi', metric: 'ar', period: 'filter', customer: null, product: null, title: 'AR Total', sub: 'Account tickets' },
+      { style: 'kpi', metric: 'tons', period: 'filter', customer: null, product: null, title: 'Total Tons', sub: 'Net tons' },
+      { style: 'kpi', metric: 'tickets', period: 'filter', customer: null, product: null, title: 'Tickets', sub: 'Current view' },
+      { style: 'kpi', metric: 'customers', period: 'filter', customer: null, product: null, title: 'Customers', sub: 'Unique accounts' },
       { style: 'table', metric: 'runs', period: 'today', customer: null, product: null, title: 'Today — Review' },
       { style: 'hl', metric: 'runs', period: 'today', customer: 'WEST COAST SAND', product: null, title: 'West Coast Sand & Gravel — Runs Today' },
       { style: 'hl', metric: 'runs', period: 'today', customer: 'EDCO', product: null, title: 'EDCO — Runs Today' },
@@ -382,11 +424,112 @@
       { style: 'list', metric: 'runs', period: 'filter', customer: null, product: null, title: 'Ticket Detail' }
     ];
 
-    // ---------- My Trackers: user-defined cards, add/remove, shared via server ----------
-    let trackerCards = [];
-
-    const METRIC_LABEL = { runs: 'Runs', tons: 'Tons', revenue: 'Revenue', customers: 'Customers' };
+    const METRIC_LABEL = { runs: 'Runs', tons: 'Tons', revenue: 'Revenue', customers: 'Customers', amount: 'Amount', ar: 'AR', tickets: 'Tickets', cash: 'Cash', card: 'Card' };
     const PERIOD_LABEL = { today: 'Today', week: 'This week', month: 'This month', all: 'All time', filter: 'Header filters' };
+
+    function isKpiCard(c) { return (c?.style || '') === 'kpi'; }
+
+    function kpiValue(c, rows) {
+      const metric = c.metric || 'amount';
+      if (metric === 'ar') return money.format(rows.reduce((s, r) => s + (r.arAmount || 0), 0));
+      if (metric === 'tons') return number.format(rows.reduce((s, r) => s + (r.tons || 0), 0));
+      if (metric === 'tickets' || metric === 'runs') return number.format(rows.length);
+      if (metric === 'customers') return number.format(new Set(rows.map(r => r.customer).filter(Boolean)).size);
+      if (metric === 'cash') return money.format(rows.reduce((s, r) => s + (r.cash || 0), 0));
+      if (metric === 'card') return money.format(rows.reduce((s, r) => s + (r.card || 0), 0));
+      if (metric === 'revenue' || metric === 'amount') return money.format(rows.reduce((s, r) => s + (r.amount || 0), 0));
+      return money.format(rows.reduce((s, r) => s + (r.amount || 0), 0));
+    }
+
+    function cardControls(i) {
+      return `
+        <div class="t-controls">
+          <button type="button" class="t-edit" data-i="${i}" title="Edit card">✎</button>
+          <button type="button" class="t-del" data-i="${i}" title="Remove card">✕</button>
+        </div>`;
+    }
+
+    function wireCardControls(root) {
+      root.querySelectorAll('.t-edit').forEach(btn => {
+        btn.addEventListener('click', e => {
+          e.stopPropagation();
+          openBuilder(Number(btn.dataset.i));
+        });
+      });
+      root.querySelectorAll('.t-del').forEach(btn => {
+        btn.addEventListener('click', async e => {
+          e.stopPropagation();
+          trackerCards.splice(Number(btn.dataset.i), 1);
+          await saveDashboard();
+          renderKpis();
+          renderTrackers();
+        });
+      });
+    }
+
+    function wireCardDrag(root, onlyKpi) {
+      let dragFrom = null;
+      root.querySelectorAll(onlyKpi ? '.kpi' : '.tracker-card').forEach(card => {
+        card.addEventListener('dragstart', e => {
+          if (e.target.closest('button, a, input, select, .bar-row, tr.ticket-row')) {
+            e.preventDefault();
+            return;
+          }
+          dragFrom = Number(card.dataset.i);
+          card.classList.add('dragging');
+        });
+        card.addEventListener('dragend', () => card.classList.remove('dragging'));
+        card.addEventListener('dragover', e => { e.preventDefault(); card.classList.add('drop-target'); });
+        card.addEventListener('dragleave', () => card.classList.remove('drop-target'));
+        card.addEventListener('drop', async e => {
+          e.preventDefault();
+          card.classList.remove('drop-target');
+          const to = Number(card.dataset.i);
+          if (dragFrom === null || dragFrom === to) return;
+          // Reorder within the same zone (kpi strip vs trackers)
+          const fromCard = trackerCards[dragFrom];
+          const toCard = trackerCards[to];
+          if (!fromCard || !toCard) return;
+          if (isKpiCard(fromCard) !== isKpiCard(toCard)) return;
+          const [moved] = trackerCards.splice(dragFrom, 1);
+          trackerCards.splice(to, 0, moved);
+          dragFrom = null;
+          await saveDashboard();
+          renderKpis();
+          renderTrackers();
+        });
+      });
+    }
+
+    /** Top KPI strip — same edit/delete as My Trackers (shared trackerCards). */
+    function renderKpis() {
+      const el = $('kpiCards');
+      if (!el) return;
+      const items = trackerCards.map((c, i) => ({ c, i })).filter(x => isKpiCard(x.c));
+      if (!items.length) {
+        el.innerHTML = '<div class="card kpi-empty">No KPI cards — click + Add KPI (or Add Card → KPI strip).</div>';
+        return;
+      }
+      el.innerHTML = items.map(({ c, i }) => {
+        const rows = trackerRows(c);
+        const title = c.title || KPI_METRIC_LABEL[c.metric] || c.metric || 'KPI';
+        const sub = c.sub || [
+          c.customer || null,
+          c.product || null,
+          periodLabel(c),
+          rows.length === 0 ? 'no tickets' : null
+        ].filter(Boolean).join(' · ');
+        return `
+          <div class="card kpi" draggable="true" data-i="${i}">
+            ${cardControls(i)}
+            <div class="label">${esc(title)}</div>
+            <div class="value">${kpiValue(c, rows)}</div>
+            <div class="muted">${esc(sub)}</div>
+          </div>`;
+      }).join('');
+      wireCardControls(el);
+      wireCardDrag(el, true);
+    }
 
     function trackerRange(c) {
       const period = typeof c === 'string' ? c : c.period;
@@ -475,19 +618,16 @@
 
     function renderTrackers() {
       const el = $('trackerCards');
-      if (!trackerCards.length) {
+      const items = trackerCards.map((c, i) => ({ c, i })).filter(x => !isKpiCard(x.c));
+      if (!items.length) {
         el.innerHTML = '<span class="muted">No tracker cards yet — click + Add Card to build one (e.g. a customer\'s runs this week).</span>';
         return;
       }
-      el.innerHTML = trackerCards.map((c, i) => {
+      el.innerHTML = items.map(({ c, i }) => {
         const style = c.style || 'hl';
         const periodText = periodLabel(c);
         const filterSub = `${c.customer ? esc(c.customer) : 'All customers'}${c.product ? ' · ' + esc(c.product) : ''}`;
-        const controls = `
-          <div class="t-controls">
-            <button class="t-edit" data-i="${i}" title="Edit card">✎</button>
-            <button class="t-del" data-i="${i}" title="Remove card">✕</button>
-          </div>`;
+        const controls = cardControls(i);
 
         if (style === 'table') {
           const s = trackerSummary(c);
@@ -556,16 +696,8 @@
         </div>`;
       }).join('');
 
-      el.querySelectorAll('.t-del').forEach(btn => btn.addEventListener('click', async e => {
-        e.stopPropagation();
-        trackerCards.splice(Number(btn.dataset.i), 1);
-        await saveTrackers();
-        renderTrackers();
-      }));
-      el.querySelectorAll('.t-edit').forEach(btn => btn.addEventListener('click', e => {
-        e.stopPropagation();
-        openBuilder(Number(btn.dataset.i));
-      }));
+      wireCardControls(el);
+      wireCardDrag(el, false);
 
       // Click a bar → put that key into the search box (filters Ticket Detail cards with period=filter)
       el.querySelectorAll('.bar-row[data-key]').forEach(row => {
@@ -583,47 +715,24 @@
           location.href = '/ticket.html?id=' + tr.dataset.id;
         });
       });
-
-      // Drag to reorder; the new order is saved for everyone.
-      let dragFrom = null;
-      el.querySelectorAll('.tracker-card').forEach(card => {
-        card.addEventListener('dragstart', e => {
-          // Don't start a card drag from interactive controls / bars / table rows
-          if (e.target.closest('button, a, input, select, .bar-row, tr.ticket-row')) {
-            e.preventDefault();
-            return;
-          }
-          dragFrom = Number(card.dataset.i);
-          card.classList.add('dragging');
-        });
-        card.addEventListener('dragend', () => card.classList.remove('dragging'));
-        card.addEventListener('dragover', e => { e.preventDefault(); card.classList.add('drop-target'); });
-        card.addEventListener('dragleave', () => card.classList.remove('drop-target'));
-        card.addEventListener('drop', async e => {
-          e.preventDefault();
-          card.classList.remove('drop-target');
-          const to = Number(card.dataset.i);
-          if (dragFrom === null || dragFrom === to) return;
-          const [moved] = trackerCards.splice(dragFrom, 1);
-          trackerCards.splice(to, 0, moved);
-          dragFrom = null;
-          await saveTrackers();
-          renderTrackers();
-        });
-      });
     }
 
-    async function saveTrackers() {
+    async function saveDashboard() {
       dashCfg.cards = trackerCards;
       try {
         await fetch('/api/dashboard/cards', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           // dayCustomers: [] doubles as a "configured" marker so an emptied
           // dashboard is not re-seeded with the defaults on next load
-          body: JSON.stringify({ cards: trackerCards, dayCustomers: [], highlight: null })
+          body: JSON.stringify({
+            cards: trackerCards,
+            dayCustomers: [],
+            highlight: null
+          })
         });
       } catch { /* keep local state; next save retries */ }
     }
+    async function saveTrackers() { return saveDashboard(); }
 
     function ensureSectionCards(cards) {
       // One-time upgrade: older layouts only had the Today/run cards.
@@ -645,6 +754,7 @@
 
     async function loadTrackerCards() {
       let fresh = false;
+      let legacyKpis = null;
       try {
         const res = await fetch('/api/dashboard/cards', { cache: 'no-store' });
         const data = await res.json();
@@ -654,17 +764,43 @@
           dashCfg.cards = Array.isArray(data.cards) ? data.cards : [];
           // never configured before -> seed the default layout once
           fresh = dashCfg.cards.length === 0 && data.dayCustomers == null && data.highlight == null;
+          // Older builds stored top KPIs in a separate `kpis` array
+          if (Array.isArray(data.kpis) && data.kpis.length) legacyKpis = data.kpis;
         }
       } catch { /* defaults stay */ }
+      let needSave = false;
       if (fresh) {
         dashCfg.cards = DEFAULT_CARDS.map(c => ({ ...c }));
-        trackerCards = dashCfg.cards;
-        saveTrackers();
-      } else if (ensureSectionCards(dashCfg.cards)) {
-        trackerCards = dashCfg.cards;
-        saveTrackers();
+        needSave = true;
+      } else {
+        // Migrate separate kpis → style:'kpi' cards (once)
+        if (legacyKpis && !dashCfg.cards.some(isKpiCard)) {
+          const migrated = legacyKpis.map(k => ({
+            style: 'kpi',
+            metric: k.metric || 'amount',
+            period: k.period || 'filter',
+            date: k.date || null,
+            customer: k.customer || null,
+            product: k.product || null,
+            title: k.title || null,
+            sub: k.sub || null
+          }));
+          dashCfg.cards = [...migrated, ...dashCfg.cards];
+          needSave = true;
+        }
+        // First-time upgrade: no KPI cards yet → prepend defaults
+        if (!dashCfg.cards.some(isKpiCard)) {
+          dashCfg.cards = [
+            ...DEFAULT_CARDS.filter(isKpiCard).map(c => ({ ...c })),
+            ...dashCfg.cards
+          ];
+          needSave = true;
+        }
+        if (ensureSectionCards(dashCfg.cards)) needSave = true;
       }
       trackerCards = dashCfg.cards;
+      if (needSave) saveDashboard();
+      renderKpis();
       renderTrackers();
     }
 
@@ -677,23 +813,38 @@
     }
 
     // Open the builder: blank for a new card, prefilled when editing (index given).
-    function openBuilder(index) {
+    // preferStyle: when adding, force a style (e.g. 'kpi' from + Add KPI).
+    function openBuilder(index, preferStyle) {
       populateTrackerCustomers();
       editingIndex = (typeof index === 'number') ? index : null;
       const c = editingIndex !== null ? trackerCards[editingIndex] : null;
-      $('tMetric').value = c?.metric || 'runs';
-      $('tCustomer').value = c?.customer || '';
-      $('tProduct').value = c?.product || '';
-      // Bars/list cards default to header filters; metric cards default to today.
-      const defaultPeriod = (c?.style === 'bars-customers' || c?.style === 'bars-products' || c?.style === 'list')
+      const style = c?.style || preferStyle || 'hl';
+      $('tStyle').value = style;
+      // Bars/list/kpi default to header filters; highlight cards default to today.
+      const defaultPeriod = (style === 'bars-customers' || style === 'bars-products' || style === 'list' || style === 'kpi')
         ? 'filter' : 'today';
       $('tPeriod').value = c?.period || defaultPeriod;
       $('tDate').value = c?.date || '';
-      $('tStyle').value = c?.style || 'hl';
-      $('tTitle').value = c?.title || '';
       $('tDate').style.display = $('tPeriod').value === 'date' ? '' : 'none';
+      $('tCustomer').value = c?.customer || '';
+      $('tProduct').value = c?.product || '';
+      $('tTitle').value = c?.title || '';
+      if ($('tSub')) $('tSub').value = c?.sub || '';
+      // Metric: kpi strip uses amount/ar/… ; other cards use runs/tons/revenue
+      const defaultMetric = style === 'kpi' ? 'amount' : 'runs';
+      const metric = c?.metric || defaultMetric;
+      // Ensure option exists (in case of custom/legacy values)
+      if (![...$('tMetric').options].some(o => o.value === metric)) {
+        const opt = document.createElement('option');
+        opt.value = metric;
+        opt.textContent = metric;
+        $('tMetric').appendChild(opt);
+      }
+      $('tMetric').value = metric;
       $('tSave').textContent = editingIndex !== null ? 'Update' : 'Add';
       $('trackerBuilder').style.display = 'grid';
+      // Scroll builder into view when editing a KPI from the top strip
+      $('trackerBuilder').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
     $('tPeriod').addEventListener('change', () => {
@@ -704,7 +855,14 @@
         $('trackerBuilder').style.display = 'none';
         return;
       }
-      openBuilder(null);
+      openBuilder(null, 'hl');
+    });
+    $('addKpiBtn').addEventListener('click', () => {
+      if ($('trackerBuilder').style.display !== 'none' && editingIndex === null) {
+        $('trackerBuilder').style.display = 'none';
+        return;
+      }
+      openBuilder(null, 'kpi');
     });
     $('tCancel').addEventListener('click', () => { $('trackerBuilder').style.display = 'none'; editingIndex = null; });
     $('tSave').addEventListener('click', async () => {
@@ -715,13 +873,15 @@
         period: $('tPeriod').value,
         date: $('tPeriod').value === 'date' ? ($('tDate').value || null) : null,
         style: $('tStyle').value,
-        title: $('tTitle').value.trim() || null
+        title: $('tTitle').value.trim() || null,
+        sub: ($('tSub')?.value || '').trim() || null
       };
       if (editingIndex !== null) trackerCards[editingIndex] = card;
       else trackerCards.push(card);
       editingIndex = null;
       $('trackerBuilder').style.display = 'none';
-      await saveTrackers();
+      await saveDashboard();
+      renderKpis();
       renderTrackers();
     });
 

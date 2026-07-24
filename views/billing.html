@@ -315,11 +315,16 @@ async function downloadCsv(kind) {
   }
 }
 
+function localYmd(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function init() {
   const today = new Date();
   const first = new Date(today.getFullYear(), today.getMonth(), 1);
-  $('fFrom').valueAsDate = first;
-  $('fTo').valueAsDate = today;
+  // Local yyyy-MM-dd — valueAsDate uses UTC and can pick the wrong day.
+  $('fFrom').value = localYmd(first);
+  $('fTo').value = localYmd(today);
 
   $('btnPreview').addEventListener('click', runPreview);
   $('btnExportDetail').addEventListener('click', () => downloadCsv('detail'));

@@ -280,7 +280,9 @@ $('btnDownloadDay').addEventListener('click', downloadDay);
 $('dayDate').addEventListener('change', refreshDaySummary);
 
 (function init() {
-  $('dayDate').valueAsDate = new Date();
+  const d = new Date();
+  // Local yyyy-MM-dd — valueAsDate uses UTC and can pick the wrong day.
+  $('dayDate').value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   loadSettings();
   refreshDaySummary();
 })();

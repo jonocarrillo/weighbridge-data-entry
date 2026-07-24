@@ -144,6 +144,44 @@
   .expected-hint.found { color: var(--slate); font-style: normal; }
   .expected-hint.miss { color: #b07700; font-style: normal; }
 
+  /* Clickable suggestion chips (customer / product / city) */
+  .pick-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 6px 0 4px;
+    max-height: 120px;
+    overflow-y: auto;
+    padding: 2px 0;
+  }
+  .pick-list:empty { display: none; }
+  .pick-list button.chip {
+    border: 1px solid var(--line);
+    background: #f7f8fa;
+    color: var(--text);
+    border-radius: 999px;
+    padding: 6px 12px;
+    font: 600 12px "Segoe UI", system-ui, sans-serif;
+    cursor: pointer;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-height: 32px;
+  }
+  .pick-list button.chip:hover { border-color: var(--accent); color: var(--accent); background: #f0fbfd; }
+  .pick-list button.chip.selected {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .pick-list .pick-empty {
+    font-size: 12px;
+    color: var(--muted);
+    font-style: italic;
+    padding: 4px 2px;
+  }
+
   .checks { display: flex; flex-wrap: wrap; gap: 18px; padding: 6px 0; }
   .checks label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
   .checks input[type=checkbox] { width: 18px; height: 18px; cursor: pointer; }
@@ -302,13 +340,14 @@
     <h2>Ticket Header</h2>
     <div class="row cols-2">
       <label class="field">
-        <span class="lbl">Truck # *</span>
+        <span class="lbl">Truck #</span>
         <input type="text" id="fTruck" autocomplete="off" inputmode="latin">
       </label>
       <label class="field">
         <span class="lbl">Company / Hauler *</span>
-        <input type="text" id="fCustomer" list="dl-customers" autocomplete="off">
+        <input type="text" id="fCustomer" list="dl-customers" autocomplete="off" placeholder="Type or click below">
         <datalist id="dl-customers"></datalist>
+        <div class="pick-list" id="pick-customers" aria-label="Customer list"></div>
       </label>
     </div>
     <div class="row cols-3">
@@ -377,24 +416,30 @@
     <h2>Product &amp; Payment</h2>
     <label class="field">
       <span class="lbl">Product Code *</span>
-      <input type="text" id="fProduct" list="dl-products" autocomplete="off">
+      <input type="text" id="fProduct" list="dl-products" autocomplete="off" placeholder="Type or click a product below">
       <datalist id="dl-products"></datalist>
+      <div class="pick-list" id="pick-products" aria-label="Product list"></div>
     </label>
     <div class="row cols-2">
+      <label class="field">
+        <span class="lbl">Rate ($ / ton)</span>
+        <input type="text" id="fRate" class="computed" readonly title="Amount ÷ Net Tons">
+        <div class="expected-hint" id="rateHint">Amount ÷ quantity (net tons)</div>
+      </label>
       <label class="field">
         <span class="lbl">Amount $</span>
         <input type="text" id="fAmount" inputmode="decimal" class="numeric">
         <div class="expected-hint" id="expectedHint">Expected: --</div>
       </label>
-      <div class="field">
-        <span class="lbl">Payment Method</span>
-        <div class="radios" id="paymentRadios">
-          <label><input type="radio" name="payment" value="CASH" checked> CASH</label>
-          <label><input type="radio" name="payment" value="CREDIT"> CREDIT</label>
-          <label><input type="radio" name="payment" value="DEBIT"> DEBIT</label>
-          <label><input type="radio" name="payment" value="AR"> AR</label>
-          <label><input type="radio" name="payment" value="EXPENSE"> EXPENSE</label>
-        </div>
+    </div>
+    <div class="field">
+      <span class="lbl">Payment Method</span>
+      <div class="radios" id="paymentRadios">
+        <label><input type="radio" name="payment" value="CASH" checked> CASH</label>
+        <label><input type="radio" name="payment" value="CREDIT"> CREDIT</label>
+        <label><input type="radio" name="payment" value="DEBIT"> DEBIT</label>
+        <label><input type="radio" name="payment" value="AR"> AR</label>
+        <label><input type="radio" name="payment" value="EXPENSE"> EXPENSE</label>
       </div>
     </div>
   </section>
@@ -409,8 +454,9 @@
     <div class="row cols-2">
       <label class="field">
         <span class="lbl">City</span>
-        <input type="text" id="fCity" list="dl-cities" autocomplete="off">
+        <input type="text" id="fCity" list="dl-cities" autocomplete="off" placeholder="Type or click below">
         <datalist id="dl-cities"></datalist>
+        <div class="pick-list" id="pick-cities" aria-label="City list"></div>
       </label>
       <label class="field">
         <span class="lbl">Address (Waste Origin)</span>
@@ -541,6 +587,7 @@ const f = {
   netLb: $('fNetLb'),
   netTons: $('fNetTons'),
   product: $('fProduct'),
+  rate: $('fRate'),
   amount: $('fAmount'),
   memo: $('fMemo'),
   city: $('fCity'),
@@ -550,6 +597,14 @@ const f = {
   byPerson: $('fByPerson'),
   weightCert: $('fWeightCert'),
   recyclingCert: $('fRecyclingCert'),
+};
+
+// Full lists from /api/dropdowns — used to render clickable chips (filtered as you type).
+const dropdownCache = {
+  customers: [],
+  products: [],
+  cities: [],
+  origins: [],
 };
 
 function readPayment() {
@@ -626,11 +681,13 @@ function recalcNet() {
   if (g == null || t == null) {
     f.netLb.value = '';
     f.netTons.value = '';
+    updateRateDisplay();
     return null;
   }
   const net = Math.abs(g - t);
   f.netLb.value = fmtNum(net);
   f.netTons.value = (net / 2000).toFixed(2);
+  updateRateDisplay();
   return net;
 }
 
@@ -639,6 +696,34 @@ function setAmountProgrammatic(value) {
   state.settingAmountProgrammatic = true;
   try { f.amount.value = value; }
   finally { state.settingAmountProgrammatic = false; }
+  updateRateDisplay();
+}
+
+// Rate = Amount ÷ Quantity (net tons). Mirrors how the server stores rate.
+function updateRateDisplay(preferredRate) {
+  const amount = parseNumber(f.amount.value);
+  const tons = parseNumber(f.netTons.value);
+  let rate = preferredRate != null && Number.isFinite(Number(preferredRate))
+    ? Number(preferredRate)
+    : null;
+  if (rate == null && amount != null && tons != null && tons > 0) {
+    rate = Math.round((amount / tons) * 100) / 100;
+  }
+  if (rate != null) {
+    f.rate.value = rate.toFixed(2);
+    if (amount != null && tons != null && tons > 0) {
+      $('rateHint').textContent = `$${rate.toFixed(2)}/ton × ${tons.toFixed(2)} tons = $${amount.toFixed(2)}`;
+      $('rateHint').className = 'expected-hint found';
+    } else {
+      $('rateHint').textContent = `$${rate.toFixed(2)} / ton (enter tons for amount)`;
+      $('rateHint').className = 'expected-hint found';
+    }
+  } else {
+    f.rate.value = '';
+    $('rateHint').textContent = 'Amount ÷ quantity (net tons)';
+    $('rateHint').className = 'expected-hint';
+  }
+  state.expectedRate = rate;
 }
 
 // ---------- pricing debounce ----------
@@ -660,6 +745,7 @@ async function runPricingLookup() {
   if (!f.product.value) {
     $('expectedHint').className = 'expected-hint';
     $('expectedHint').textContent = 'Expected: select product';
+    updateRateDisplay();
     return;
   }
 
@@ -667,20 +753,25 @@ async function runPricingLookup() {
     const res = await fetch('/api/pricing?' + params.toString());
     const data = await res.json();
     if (data.expected != null) {
+      const rate = data.rate != null ? Number(data.rate) : (tons > 0 ? data.expected / tons : null);
+      const ratePart = rate != null && Number.isFinite(rate)
+        ? `$${Number(rate).toFixed(2)}/ton × ${(tons || 0).toFixed(2)} tons`
+        : data.status;
       $('expectedHint').className = 'expected-hint found';
-      $('expectedHint').textContent = 'Expected: ' + data.status;
-      state.expectedRate = data.rate;
+      $('expectedHint').textContent = `Expected: ${ratePart} = $${Number(data.expected).toFixed(2)}`;
       if (!state.amountManuallyEdited) {
-        setAmountProgrammatic(data.expected.toFixed(2));
+        setAmountProgrammatic(Number(data.expected).toFixed(2));
+      } else {
+        updateRateDisplay(data.rate);
       }
     } else if (data.rate != null) {
       $('expectedHint').className = 'expected-hint found';
-      $('expectedHint').textContent = 'Expected: ' + data.status;
-      state.expectedRate = data.rate;
+      $('expectedHint').textContent = `Expected: $${Number(data.rate).toFixed(2)}/ton × tons`;
+      updateRateDisplay(data.rate);
     } else {
       $('expectedHint').className = 'expected-hint miss';
       $('expectedHint').textContent = 'Expected: ' + (data.status || 'no price found');
-      state.expectedRate = null;
+      updateRateDisplay();
     }
     // The matched pricing rule's account_type carries the default payment method.
     // Auto-select that radio; the operator can still change it before saving.
@@ -689,6 +780,7 @@ async function runPricingLookup() {
   } catch (err) {
     $('expectedHint').className = 'expected-hint';
     $('expectedHint').textContent = 'Expected: --';
+    updateRateDisplay();
   }
 }
 
@@ -705,8 +797,17 @@ function wireEvents() {
     recalcNet();
     schedulePricingLookup();
   });
-  f.customer.addEventListener('input', schedulePricingLookup);
-  f.product.addEventListener('input', schedulePricingLookup);
+  f.customer.addEventListener('input', () => {
+    renderPickList('pick-customers', dropdownCache.customers, f.customer);
+    schedulePricingLookup();
+  });
+  f.product.addEventListener('input', () => {
+    renderPickList('pick-products', dropdownCache.products, f.product);
+    schedulePricingLookup();
+  });
+  f.city.addEventListener('input', () => {
+    renderPickList('pick-cities', dropdownCache.cities, f.city);
+  });
   f.date.addEventListener('input', schedulePricingLookup);
 
   // Truck → tare auto-fill: lookup the truck on blur (so we don't fire on every
@@ -716,8 +817,10 @@ function wireEvents() {
   f.truck.addEventListener('change', autofillTareFromTruck);
 
   // Track manual amount edits — same flag as WinForms _amountManuallyEdited.
+  // Recalc rate as amount ÷ quantity whenever amount changes.
   f.amount.addEventListener('input', () => {
     if (!state.settingAmountProgrammatic) state.amountManuallyEdited = true;
+    updateRateDisplay();
   });
 
   document.querySelectorAll('[data-fill-time]').forEach(btn => {
@@ -750,21 +853,63 @@ function nowHHmm() {
   return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
 
-// ---------- dropdowns ----------
+// ---------- dropdowns + clickable pick lists ----------
 async function loadDropdowns() {
   try {
     const res = await fetch('/api/dropdowns');
     const data = await res.json();
-    fillDatalist('dl-customers', data.customers);
-    fillDatalist('dl-products', data.products);
-    fillDatalist('dl-cities', data.cities);
-    fillDatalist('dl-origins', data.origins);
+    dropdownCache.customers = data.customers || [];
+    dropdownCache.products = data.products || [];
+    dropdownCache.cities = data.cities || [];
+    dropdownCache.origins = data.origins || [];
+    fillDatalist('dl-customers', dropdownCache.customers);
+    fillDatalist('dl-products', dropdownCache.products);
+    fillDatalist('dl-cities', dropdownCache.cities);
+    fillDatalist('dl-origins', dropdownCache.origins);
+    renderPickList('pick-customers', dropdownCache.customers, f.customer);
+    renderPickList('pick-products', dropdownCache.products, f.product);
+    renderPickList('pick-cities', dropdownCache.cities, f.city);
   } catch { /* first run; no data */ }
 }
 function fillDatalist(id, items) {
   const dl = $(id);
   if (!dl || !items) return;
   dl.innerHTML = items.map(v => `<option value="${escapeHtml(v)}"></option>`).join('');
+}
+
+/** Clickable chips under a field — tap to fill the input (same idea as datalist, but visible). */
+function renderPickList(containerId, items, inputEl) {
+  const box = $(containerId);
+  if (!box) return;
+  const all = Array.isArray(items) ? items.filter(Boolean) : [];
+  const term = (inputEl.value || '').trim().toLowerCase();
+  const selected = (inputEl.value || '').trim().toLowerCase();
+  let shown = term
+    ? all.filter(v => String(v).toLowerCase().includes(term))
+    : all.slice();
+  // Cap for touch screens — keep the selected value visible at the front.
+  const MAX = 40;
+  if (shown.length > MAX) shown = shown.slice(0, MAX);
+
+  if (shown.length === 0) {
+    box.innerHTML = all.length === 0
+      ? '<span class="pick-empty">No saved values yet — type freely.</span>'
+      : '<span class="pick-empty">No matches — keep typing a new value.</span>';
+    return;
+  }
+
+  box.innerHTML = shown.map(v => {
+    const isSel = String(v).trim().toLowerCase() === selected;
+    return `<button type="button" class="chip${isSel ? ' selected' : ''}" data-value="${escapeHtml(v)}" title="${escapeHtml(v)}">${escapeHtml(v)}</button>`;
+  }).join('');
+
+  box.querySelectorAll('button.chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      inputEl.value = btn.getAttribute('data-value') || '';
+      inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+      inputEl.focus();
+    });
+  });
 }
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
@@ -810,7 +955,6 @@ function buildRequest() {
 
 async function saveTicket(thenPrint) {
   if (state.saveInFlight) return; // double-click guard
-  if (!f.truck.value.trim()) { toast('Truck # is required', 'error'); return; }
   if (!f.customer.value.trim()) { toast('Company / hauler is required', 'error'); return; }
 
   state.saveInFlight = true;
@@ -892,6 +1036,11 @@ async function loadTicket(id) {
   f.recyclingCert.checked = !!t.recyclingCdCertificate;
   setPayment((t.payment || 'CASH').toUpperCase());
   recalcNet();
+  // Prefer stored rate (amount÷qty) when present; pricing lookup may refresh it.
+  if (t.rate != null) updateRateDisplay(Number(t.rate));
+  renderPickList('pick-customers', dropdownCache.customers, f.customer);
+  renderPickList('pick-products', dropdownCache.products, f.product);
+  renderPickList('pick-cities', dropdownCache.cities, f.city);
   schedulePricingLookup();
   $('btnPrint').disabled = false;
   $('modeLabel').textContent = `Editing #${t.weighmasterNumber || ''} (id=${id})`;
@@ -940,20 +1089,35 @@ function printTicket(id) {
   frame.src = url;
 }
 
+// Local yyyy-MM-dd for <input type="date">. Avoid valueAsDate = new Date() —
+// that uses the Date's UTC components and can pick "tomorrow" after ~5pm Pacific.
+function localYmd(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function clearForm() {
   state.id = null;
   state.amountManuallyEdited = false;
   state.hasSignature = false;
   state.signatureDirty = false;
+  state.expectedRate = null;
   for (const key in f) {
     const el = f[key];
     if (el.type === 'checkbox') el.checked = false;
     else if (!el.readOnly) el.value = '';
   }
+  f.rate.value = '';
+  f.netLb.value = '';
+  f.netTons.value = '';
   setPayment('CASH');
-  f.date.valueAsDate = new Date();
+  f.date.value = localYmd();
   $('expectedHint').textContent = 'Expected: --';
   $('expectedHint').className = 'expected-hint';
+  $('rateHint').textContent = 'Amount ÷ quantity (net tons)';
+  $('rateHint').className = 'expected-hint';
+  renderPickList('pick-customers', dropdownCache.customers, f.customer);
+  renderPickList('pick-products', dropdownCache.products, f.product);
+  renderPickList('pick-cities', dropdownCache.cities, f.city);
   $('modeLabel').textContent = 'New Ticket';
   $('btnPrint').disabled = true;
   clearSignature();
@@ -1129,7 +1293,8 @@ async function init() {
   goStep(1);
   await loadDefaults();
   await loadDropdowns();
-  f.date.valueAsDate = new Date();
+  // Prefer server local date from defaults; fall back to browser local calendar.
+  if (!f.date.value) f.date.value = localYmd();
   SigPad.resize();
 
   // If URL has ?id=, load that ticket.
