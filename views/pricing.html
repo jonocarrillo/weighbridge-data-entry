@@ -42,7 +42,22 @@
   main { padding: 16px; max-width: 1400px; margin: 0 auto; }
 
   .layout { display: grid; grid-template-columns: minmax(0, 460px) 1fr; gap: 16px; align-items: start; }
+  .layout-left { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
   @media (max-width: 1023px) { .layout { grid-template-columns: 1fr; } }
+
+  table.mini { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table.mini th, table.mini td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  table.mini th { color: var(--label); font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; }
+  table.mini tbody tr { cursor: pointer; }
+  table.mini tbody tr:hover { background: #f3f7ff; }
+  table.mini tbody tr.selected { background: var(--info-bg); }
+  table.mini .actions { white-space: nowrap; }
+  table.mini button.linkish {
+    border: 0; background: none; color: var(--label); font: inherit; font-weight: 600;
+    cursor: pointer; padding: 0 4px;
+  }
+  table.mini button.linkish.danger { color: var(--error); }
+  .project-empty { color: var(--muted); font-style: italic; font-size: 12px; padding: 8px 0; }
 
   section.panel {
     background: var(--panel);
@@ -110,7 +125,7 @@
   button.btn.ghost { background: transparent; color: var(--slate); border: 1px solid var(--line); }
   button.btn.ghost:hover { background: #f7f8fa; }
 
-  .grid-wrap { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .grid-wrap { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; min-width: 0; }
   .grid-head {
     padding: 10px 14px;
     border-bottom: 1px solid var(--line);
@@ -126,10 +141,11 @@
   .grid-head .count { color: var(--muted); font-size: 12px; }
   .table-scroll { max-height: calc(100vh - 220px); overflow: auto; }
 
-  table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.grid { width: max-content; min-width: 100%; border-collapse: collapse; font-size: 13px; }
   table.grid th, table.grid td { padding: 7px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
   table.grid th { background: #f8f9fb; font-weight: 600; color: var(--label); text-align: left; position: sticky; top: 0; z-index: 1; }
   table.grid td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  table.grid td.terms { font-weight: 600; color: var(--slate); }
   table.grid tbody tr { cursor: pointer; }
   table.grid tbody tr:hover { background: #f3f7ff; }
   table.grid tbody tr.selected { background: var(--info-bg); }
@@ -178,6 +194,7 @@
 <main>
 <div class="layout">
 
+  <div class="layout-left">
   <section class="panel">
     <h2 id="formTitle">New Rule</h2>
 
@@ -195,12 +212,20 @@
     </div>
 
     <label class="field">
+      <span class="lbl">Project Address <span style="font-weight:400;color:var(--muted);">(optional — stapled site)</span></span>
+      <select id="fProjectAddress">
+        <option value="">— All sites / no project —</option>
+      </select>
+      <div class="hint">Pick a stapled project so this rate/terms apply only at that job site.</div>
+    </label>
+
+    <label class="field">
       <span class="lbl">Product / Service *</span>
       <input type="text" id="fProduct" list="dl-products" autocomplete="off">
       <datalist id="dl-products"></datalist>
     </label>
 
-    <div class="grid-3">
+    <div class="grid-2">
       <label class="field">
         <span class="lbl">Pricing Type</span>
         <select id="fPricingType">
@@ -219,6 +244,21 @@
           <option value="AR">AR</option>
           <option value="Expense">Expense</option>
         </select>
+      </label>
+    </div>
+
+    <div class="grid-2">
+      <label class="field" id="fTermsWrap">
+        <span class="lbl">AR Terms</span>
+        <select id="fPaymentTerms">
+          <option value="">—</option>
+          <option value="Net 10">Net 10</option>
+          <option value="Net 15">Net 15</option>
+          <option value="Net 30">Net 30</option>
+          <option value="Net 45">Net 45</option>
+          <option value="Net 60">Net 60</option>
+        </select>
+        <div class="hint">Shown for AR only — Net 10 / Net 30 etc. Used for invoice due date.</div>
       </label>
       <label class="field">
         <span class="lbl">Effective (Start) Date</span>
@@ -286,6 +326,71 @@
     </div>
   </section>
 
+  <section class="panel" id="projectsPanel">
+    <h2>Stapled Project Addresses</h2>
+    <p class="hint" style="margin-top:0">
+      Pin job-site addresses to a customer. On tickets they appear as one-tap choices and can carry
+      their own AR terms. Pricing rules can target a project for different rates.
+    </p>
+
+    <div class="grid-2">
+      <label class="field">
+        <span class="lbl">Customer *</span>
+        <input type="text" id="pCustomer" list="dl-customers" autocomplete="off" placeholder="e.g. EDCO RECYCLING">
+      </label>
+      <label class="field">
+        <span class="lbl">Label</span>
+        <input type="text" id="pLabel" placeholder="optional — Site A, Job #12">
+      </label>
+    </div>
+    <label class="field">
+      <span class="lbl">Street Address *</span>
+      <input type="text" id="pAddress" placeholder="2755 California St">
+    </label>
+    <div class="grid-2">
+      <label class="field">
+        <span class="lbl">City</span>
+        <input type="text" id="pCity">
+      </label>
+      <label class="field">
+        <span class="lbl">Payment Method</span>
+        <select id="pAccountType">
+          <option value="">— use company default —</option>
+          <option value="Regular">Regular</option>
+          <option value="Cash">Cash</option>
+          <option value="Credit">Credit</option>
+          <option value="Debit">Debit</option>
+          <option value="AR">AR</option>
+          <option value="Expense">Expense</option>
+        </select>
+      </label>
+    </div>
+    <div class="grid-2">
+      <label class="field" id="pTermsWrap">
+        <span class="lbl">AR Terms</span>
+        <select id="pPaymentTerms">
+          <option value="">—</option>
+          <option value="Net 10">Net 10</option>
+          <option value="Net 15">Net 15</option>
+          <option value="Net 30">Net 30</option>
+          <option value="Net 45">Net 45</option>
+          <option value="Net 60">Net 60</option>
+        </select>
+      </label>
+      <label class="field">
+        <span class="lbl">Notes</span>
+        <input type="text" id="pNotes">
+      </label>
+    </div>
+    <div class="form-actions">
+      <button class="btn primary" id="btnProjectSave" type="button">Save Project</button>
+      <button class="btn ghost" id="btnProjectNew" type="button">New</button>
+      <button class="btn danger" id="btnProjectDelete" type="button" disabled>Delete</button>
+    </div>
+    <div id="projectList" style="margin-top:12px"></div>
+  </section>
+  </div><!-- /.layout-left -->
+
   <div class="grid-wrap">
     <div class="grid-head">
       <input class="search" id="search" placeholder="Filter rules by customer / product / class…">
@@ -298,6 +403,7 @@
   </div>
 
 </div>
+
 </main>
 
 <div class="modal" id="importModal">
@@ -323,14 +429,19 @@ const state = {
   rules: [],
   filter: '',
   selectedId: null,
+  companies: [],
+  projects: [],
+  selectedProjectId: null,
 };
 
 const f = {
   customer: $('fCustomer'),
   className: $('fClass'),
   product: $('fProduct'),
+  projectAddress: $('fProjectAddress'),
   pricingType: $('fPricingType'),
   accountType: $('fAccountType'),
+  paymentTerms: $('fPaymentTerms'),
   effective: $('fEffective'),
   endDate: $('fEndDate'),
   rate: $('fRate'),
@@ -342,6 +453,75 @@ const f = {
   surchargePercent: $('fSurchargePercent'),
   notes: $('fNotes'),
 };
+
+const p = {
+  customer: $('pCustomer'),
+  label: $('pLabel'),
+  address: $('pAddress'),
+  city: $('pCity'),
+  accountType: $('pAccountType'),
+  paymentTerms: $('pPaymentTerms'),
+  notes: $('pNotes'),
+};
+
+function syncTermsVisibility() {
+  const isAr = f.accountType.value === 'AR';
+  const wrap = $('fTermsWrap');
+  if (wrap) wrap.style.display = isAr ? '' : 'none';
+  if (f.paymentTerms) {
+    f.paymentTerms.disabled = !isAr;
+    if (isAr && !f.paymentTerms.value) f.paymentTerms.value = 'Net 30';
+    if (!isAr) f.paymentTerms.value = '';
+  }
+}
+
+/** When a customer is typed, load their saved AR terms / default payment. */
+async function loadCompanyIntoForm() {
+  const name = f.customer.value.trim();
+  if (!name) return;
+  try {
+    const res = await fetch('/api/companies/lookup?name=' + encodeURIComponent(name));
+    if (!res.ok) return;
+    const co = await res.json();
+    if (co.accountType && ['Cash', 'Credit', 'Debit', 'AR', 'Expense', 'Regular'].includes(co.accountType)) {
+      f.accountType.value = co.accountType;
+    }
+    syncTermsVisibility();
+    if (co.paymentTerms && f.paymentTerms) {
+      const want = String(co.paymentTerms);
+      const opt = Array.from(f.paymentTerms.options).find(
+        o => o.value.toLowerCase() === want.toLowerCase()
+      );
+      if (opt) f.paymentTerms.value = opt.value;
+      else if (want) {
+        const o = document.createElement('option');
+        o.value = want;
+        o.textContent = want;
+        f.paymentTerms.appendChild(o);
+        f.paymentTerms.value = want;
+      }
+    }
+  } catch { /* no profile */ }
+}
+
+/** Persist company payment + terms when a pricing rule is saved for a named customer. */
+async function syncCompanyFromRule(payload) {
+  const name = payload.customer;
+  if (!name) return;
+  try {
+    await fetch('/api/companies', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name,
+        accountType: payload.accountType || 'Regular',
+        paymentTerms: payload.accountType === 'AR'
+          ? (payload.paymentTerms || 'Net 30')
+          : null
+      })
+    });
+  } catch { /* non-fatal */ }
+}
 
 const toast = (msg, kind = '') => {
   const el = $('toast');
@@ -368,6 +548,214 @@ function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+/** AR rules always show terms (default Net 30). Others show stored value or em dash. */
+function formatRuleTerms(r) {
+  const terms = (r.paymentTerms || r.payment_terms || '').trim();
+  if (r.accountType === 'AR' || r.account_type === 'AR') return terms || 'Net 30';
+  return terms || '—';
+}
+
+function formatProjectCell(r) {
+  if (!r.projectAddressId) return '—';
+  const label = r.projectLabel || '';
+  const addr = r.projectAddress || '';
+  if (label && addr) return `${label} · ${addr}`;
+  return label || addr || `#${r.projectAddressId}`;
+}
+
+function projectsForCustomer(customerName) {
+  const name = (customerName || '').trim().toLowerCase();
+  if (!name) return state.projects.slice();
+  return state.projects.filter(pr => String(pr.customer || '').toLowerCase() === name);
+}
+
+function fillProjectSelect(selectEl, customerName, selectedId) {
+  if (!selectEl) return;
+  const list = projectsForCustomer(customerName);
+  const keep = selectedId != null ? String(selectedId) : '';
+  selectEl.innerHTML = '<option value="">— All sites / no project —</option>' +
+    list.map(pr => {
+      const text = pr.displayName || [pr.label, pr.address, pr.city].filter(Boolean).join(' — ');
+      return `<option value="${pr.id}">${escapeHtml(text)}</option>`;
+    }).join('');
+  if (keep && Array.from(selectEl.options).some(o => o.value === keep)) {
+    selectEl.value = keep;
+  } else {
+    selectEl.value = '';
+  }
+}
+
+function syncProjectTermsVisibility() {
+  const isAr = p.accountType && p.accountType.value === 'AR';
+  const wrap = $('pTermsWrap');
+  if (wrap) wrap.style.opacity = isAr || !p.accountType.value ? '1' : '0.55';
+  if (p.paymentTerms) {
+    if (isAr && !p.paymentTerms.value) p.paymentTerms.value = 'Net 30';
+    if (p.accountType.value && p.accountType.value !== 'AR' && p.accountType.value !== '') {
+      p.paymentTerms.value = '';
+    }
+  }
+}
+
+function clearProjectForm() {
+  state.selectedProjectId = null;
+  if (p.label) p.label.value = '';
+  if (p.address) p.address.value = '';
+  if (p.city) p.city.value = '';
+  if (p.accountType) p.accountType.value = '';
+  if (p.paymentTerms) p.paymentTerms.value = '';
+  if (p.notes) p.notes.value = '';
+  if ($('btnProjectDelete')) $('btnProjectDelete').disabled = true;
+  document.querySelectorAll('#projectList tr.selected').forEach(r => r.classList.remove('selected'));
+  syncProjectTermsVisibility();
+}
+
+function selectProject(pr) {
+  state.selectedProjectId = pr.id;
+  if (p.customer) p.customer.value = pr.customer || '';
+  if (p.label) p.label.value = pr.label || '';
+  if (p.address) p.address.value = pr.address || '';
+  if (p.city) p.city.value = pr.city || '';
+  if (p.accountType) p.accountType.value = pr.accountType || '';
+  if (p.paymentTerms) {
+    const want = pr.paymentTerms || '';
+    if (want) {
+      const opt = Array.from(p.paymentTerms.options).find(
+        o => o.value.toLowerCase() === want.toLowerCase()
+      );
+      if (opt) p.paymentTerms.value = opt.value;
+      else {
+        const o = document.createElement('option');
+        o.value = want;
+        o.textContent = want;
+        p.paymentTerms.appendChild(o);
+        p.paymentTerms.value = want;
+      }
+    } else p.paymentTerms.value = '';
+  }
+  if (p.notes) p.notes.value = pr.notes || '';
+  if ($('btnProjectDelete')) $('btnProjectDelete').disabled = false;
+  syncProjectTermsVisibility();
+  document.querySelectorAll('#projectList tr.selected').forEach(r => r.classList.remove('selected'));
+  const tr = document.querySelector(`#projectList tr[data-id="${pr.id}"]`);
+  if (tr) tr.classList.add('selected');
+}
+
+function renderProjectList() {
+  const box = $('projectList');
+  if (!box) return;
+  const name = (p.customer && p.customer.value || '').trim();
+  const list = name
+    ? projectsForCustomer(name)
+    : state.projects.slice().sort((a, b) =>
+        String(a.customer || '').localeCompare(String(b.customer || ''), undefined, { sensitivity: 'base' })
+      );
+
+  if (list.length === 0) {
+    box.innerHTML = `<div class="project-empty">${
+      name
+        ? `No stapled projects for ${escapeHtml(name)} yet — add one above.`
+        : 'Enter a customer above, then add project addresses.'
+    }</div>`;
+    return;
+  }
+
+  box.innerHTML = `<table class="mini"><thead><tr>
+    <th>Customer</th><th>Label</th><th>Address</th><th>City</th><th>Payment</th><th>Terms</th>
+  </tr></thead><tbody>
+    ${list.map(pr => `
+      <tr data-id="${pr.id}" class="${pr.id === state.selectedProjectId ? 'selected' : ''}">
+        <td>${escapeHtml(pr.customer)}</td>
+        <td>${escapeHtml(pr.label || '')}</td>
+        <td>${escapeHtml(pr.address)}</td>
+        <td>${escapeHtml(pr.city || '')}</td>
+        <td>${escapeHtml(pr.accountType || '—')}</td>
+        <td class="terms">${escapeHtml(pr.paymentTerms || (pr.accountType === 'AR' ? 'Net 30' : '—'))}</td>
+      </tr>`).join('')}
+  </tbody></table>`;
+
+  box.querySelectorAll('tbody tr').forEach(tr => {
+    tr.addEventListener('click', () => {
+      const id = Number(tr.getAttribute('data-id'));
+      const pr = state.projects.find(x => x.id === id);
+      if (pr) selectProject(pr);
+    });
+  });
+}
+
+async function loadProjects() {
+  try {
+    const res = await fetch('/api/projects?all=1');
+    if (!res.ok) return;
+    state.projects = await res.json();
+    fillProjectSelect(f.projectAddress, f.customer.value, f.projectAddress && f.projectAddress.value);
+    renderProjectList();
+  } catch { /* ignore */ }
+}
+
+async function saveProject() {
+  const customer = (p.customer.value || '').trim();
+  const address = (p.address.value || '').trim();
+  if (!customer) { toast('Customer is required for a project', 'error'); p.customer.focus(); return; }
+  if (!address) { toast('Street address is required', 'error'); p.address.focus(); return; }
+  const payload = {
+    customer,
+    label: (p.label.value || '').trim() || null,
+    address,
+    city: (p.city.value || '').trim() || null,
+    accountType: p.accountType.value || null,
+    paymentTerms: p.accountType.value === 'AR'
+      ? (p.paymentTerms.value || 'Net 30')
+      : (p.paymentTerms.value || null),
+    notes: (p.notes.value || '').trim() || null,
+  };
+  const url = state.selectedProjectId
+    ? `/api/projects/${state.selectedProjectId}`
+    : '/api/projects';
+  const method = state.selectedProjectId ? 'PUT' : 'POST';
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      toast(err.error || 'Save project failed', 'error');
+      return;
+    }
+    toast('Project saved', 'success');
+    const data = await res.json();
+    await loadProjects();
+    await loadDropdowns();
+    if (data.id) {
+      const pr = state.projects.find(x => x.id === data.id);
+      if (pr) selectProject(pr);
+    } else clearProjectForm();
+  } catch {
+    toast('Network error', 'error');
+  }
+}
+
+async function deleteProject() {
+  if (!state.selectedProjectId) return;
+  if (!confirm('Delete this stapled project address? Pricing rules for it become customer-level.')) return;
+  try {
+    const res = await fetch(`/api/projects/${state.selectedProjectId}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      toast(err.error || 'Delete failed', 'error');
+      return;
+    }
+    toast('Project deleted', 'success');
+    clearProjectForm();
+    await loadProjects();
+    await loadRules();
+  } catch {
+    toast('Network error', 'error');
+  }
+}
+
 // Flat/Run only care about rate; Hauling adds base/allowed/overage/miles/mileRate.
 // Surcharge % applies to every pricing type, so it is always enabled.
 function applyPricingTypeMask() {
@@ -385,8 +773,10 @@ function clearForm() {
   f.customer.value = '';
   f.className.value = '';
   f.product.value = '';
+  if (f.projectAddress) fillProjectSelect(f.projectAddress, '', null);
   f.pricingType.value = 'Flat';
   f.accountType.value = 'Regular';
+  if (f.paymentTerms) f.paymentTerms.value = '';
   f.effective.value = '';
   f.endDate.value = '';
   f.rate.value = '';
@@ -400,6 +790,7 @@ function clearForm() {
   $('formTitle').textContent = 'New Rule';
   $('btnDelete').disabled = true;
   applyPricingTypeMask();
+  syncTermsVisibility();
   document.querySelectorAll('#grid tbody tr.selected').forEach(r => r.classList.remove('selected'));
   f.customer.focus();
 }
@@ -409,6 +800,7 @@ function selectRule(rule) {
   f.customer.value = rule.customer ?? '';
   f.className.value = rule.class ?? '';
   f.product.value = rule.product ?? '';
+  fillProjectSelect(f.projectAddress, rule.customer, rule.projectAddressId);
   // Normalize the pricing type from the server (Flat / Run / Hauling).
   f.pricingType.value = (rule.pricingType === 'Hauling' || rule.pricingType === 'Run')
     ? rule.pricingType
@@ -438,6 +830,27 @@ function selectRule(rule) {
   $('formTitle').textContent = `Edit Rule (id=${rule.id})`;
   $('btnDelete').disabled = false;
   applyPricingTypeMask();
+  syncTermsVisibility();
+  // Prefill terms from the rule; fall back to company profile if blank.
+  if (f.paymentTerms) {
+    const want = rule.paymentTerms || '';
+    if (want) {
+      const opt = Array.from(f.paymentTerms.options).find(
+        o => o.value.toLowerCase() === String(want).toLowerCase()
+      );
+      if (opt) f.paymentTerms.value = opt.value;
+      else {
+        const o = document.createElement('option');
+        o.value = want;
+        o.textContent = want;
+        f.paymentTerms.appendChild(o);
+        f.paymentTerms.value = want;
+      }
+    } else if (rule.accountType === 'AR') {
+      f.paymentTerms.value = 'Net 30';
+    }
+  }
+  if (!rule.paymentTerms) loadCompanyIntoForm();
 
   document.querySelectorAll('#grid tbody tr.selected').forEach(r => r.classList.remove('selected'));
   const tr = document.querySelector(`#grid tbody tr[data-id="${rule.id}"]`);
@@ -445,10 +858,15 @@ function selectRule(rule) {
 }
 
 function buildRequest() {
+  const accountType = f.accountType.value || 'Regular';
+  const projectAddressId = f.projectAddress && f.projectAddress.value
+    ? Number(f.projectAddress.value)
+    : null;
   return {
     customer: f.customer.value.trim() || null,
     className: f.className.value.trim() || null,
     productService: f.product.value.trim() || null,
+    projectAddressId: projectAddressId > 0 ? projectAddressId : null,
     pricingType: f.pricingType.value || 'Flat',
     rate: parseNumber(f.rate.value),
     baseRate: parseNumber(f.baseRate.value),
@@ -457,7 +875,10 @@ function buildRequest() {
     miles: parseNumber(f.miles.value),
     mileRate: parseNumber(f.mileRate.value),
     surchargePercent: parseNumber(f.surchargePercent.value),
-    accountType: f.accountType.value || 'Regular',
+    accountType,
+    paymentTerms: accountType === 'AR'
+      ? ((f.paymentTerms && f.paymentTerms.value) || 'Net 30')
+      : null,
     effectiveDate: f.effective.value || null,
     endDate: f.endDate.value || null,
     notes: f.notes.value.trim() || null,
@@ -491,7 +912,10 @@ function renderGrid() {
   const rows = !term ? state.rules : state.rules.filter(r => {
     return (r.customer || '').toLowerCase().includes(term)
         || (r.product || '').toLowerCase().includes(term)
-        || (r.class || '').toLowerCase().includes(term);
+        || (r.class || '').toLowerCase().includes(term)
+        || (r.projectLabel || '').toLowerCase().includes(term)
+        || (r.projectAddress || '').toLowerCase().includes(term)
+        || (r.paymentTerms || '').toLowerCase().includes(term);
   });
 
   $('ruleCount').textContent = `${rows.length} of ${state.rules.length} rule${state.rules.length === 1 ? '' : 's'}`;
@@ -508,20 +932,26 @@ function renderGrid() {
   $('emptyGrid').style.display = 'none';
   table.style.display = '';
 
+  // Customer / Project / Payment / Terms early so site-specific rates are obvious.
   const head = `<thead><tr>
-    <th>Customer</th><th>Class</th><th>Product</th>
-    <th>Type</th><th class="num">Rate</th><th class="num">Base</th>
+    <th>Customer</th><th>Project</th><th>Product</th><th>Type</th>
+    <th>Payment</th><th>Terms</th>
+    <th class="num">Rate</th><th class="num">Base</th>
     <th class="num">Allowed</th><th class="num">Overage</th>
     <th class="num">Miles</th><th class="num">Mile Rate</th><th class="num">Surcharge %</th>
-    <th>Payment</th><th>Effective</th><th>End</th><th>Notes</th>
+    <th>Class</th><th>Effective</th><th>End</th><th>Notes</th>
   </tr></thead>`;
 
-  const body = '<tbody>' + rows.map(r => `
+  const body = '<tbody>' + rows.map(r => {
+    const terms = formatRuleTerms(r);
+    return `
     <tr data-id="${r.id}" ${r.id === state.selectedId ? 'class="selected"' : ''}>
       <td>${escapeHtml(r.customer)}</td>
-      <td>${escapeHtml(r.class)}</td>
+      <td>${escapeHtml(formatProjectCell(r))}</td>
       <td>${escapeHtml(r.product)}</td>
       <td>${escapeHtml(r.pricingType)}</td>
+      <td>${escapeHtml(r.accountType)}</td>
+      <td class="terms">${escapeHtml(terms)}</td>
       <td class="num">${fmt(r.rate)}</td>
       <td class="num">${fmt(r.baseRate)}</td>
       <td class="num">${fmt(r.allowedTons)}</td>
@@ -529,11 +959,12 @@ function renderGrid() {
       <td class="num">${fmt(r.miles)}</td>
       <td class="num">${fmt(r.mileRate)}</td>
       <td class="num">${fmt(r.surchargePercent)}</td>
-      <td>${escapeHtml(r.accountType)}</td>
+      <td>${escapeHtml(r.class)}</td>
       <td>${escapeHtml((r.effectiveDate || '').slice(0, 10))}</td>
       <td>${escapeHtml((r.endDate || '').slice(0, 10))}</td>
       <td>${escapeHtml(r.notes)}</td>
-    </tr>`).join('') + '</tbody>';
+    </tr>`;
+  }).join('') + '</tbody>';
 
   table.innerHTML = head + body;
   table.querySelectorAll('tbody tr').forEach(tr => {
@@ -586,6 +1017,8 @@ async function saveRule() {
       toast(err.error || 'Save failed', 'error');
       return;
     }
+    // Also store company default payment + AR terms for ticket form lookup.
+    await syncCompanyFromRule(payload);
     toast('Saved', 'success');
     clearForm();
     await loadRules();
@@ -647,18 +1080,40 @@ function wireEvents() {
   $('btnDelete').addEventListener('click', deleteRule);
   $('btnCloseImport').addEventListener('click', () => $('importModal').classList.remove('open'));
   f.pricingType.addEventListener('change', applyPricingTypeMask);
+  f.accountType.addEventListener('change', syncTermsVisibility);
+  f.customer.addEventListener('change', () => {
+    fillProjectSelect(f.projectAddress, f.customer.value, f.projectAddress && f.projectAddress.value);
+    loadCompanyIntoForm();
+  });
+  f.customer.addEventListener('blur', () => {
+    fillProjectSelect(f.projectAddress, f.customer.value, f.projectAddress && f.projectAddress.value);
+    loadCompanyIntoForm();
+  });
   $('search').addEventListener('input', e => { state.filter = e.target.value; renderGrid(); });
   $('fileImport').addEventListener('change', e => {
     const file = e.target.files?.[0];
     if (file) importCsv(file);
     e.target.value = ''; // allow re-upload of same file
   });
+
+  // Project address panel
+  if ($('btnProjectSave')) $('btnProjectSave').addEventListener('click', saveProject);
+  if ($('btnProjectNew')) $('btnProjectNew').addEventListener('click', clearProjectForm);
+  if ($('btnProjectDelete')) $('btnProjectDelete').addEventListener('click', deleteProject);
+  if (p.accountType) p.accountType.addEventListener('change', syncProjectTermsVisibility);
+  if (p.customer) {
+    p.customer.addEventListener('input', renderProjectList);
+    p.customer.addEventListener('change', renderProjectList);
+    p.customer.addEventListener('blur', renderProjectList);
+  }
 }
 
 async function init() {
   wireEvents();
   applyPricingTypeMask();
-  await Promise.all([loadRules(), loadDropdowns()]);
+  syncTermsVisibility();
+  syncProjectTermsVisibility();
+  await Promise.all([loadRules(), loadDropdowns(), loadProjects()]);
 }
 init();
 </script>
