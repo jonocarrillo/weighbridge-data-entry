@@ -27,9 +27,20 @@
     input, select, button { height: 34px; border: 1px solid var(--line); border-radius: 6px; padding: 0 10px; background: #fff; font: inherit; font-size: 13px; }
     button { background: var(--green); border-color: var(--green); color: #fff; font-weight: 700; cursor: pointer; }
     main { padding: 18px 22px 28px; max-width: 1500px; margin: 0 auto; }
-    .kpi-section { margin-bottom: 16px; }
-    .kpi-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
-    .kpi-toolbar strong { font-size: 14px; }
+    .dash-workspace { margin-bottom: 16px; overflow: hidden; }
+    .dash-toolbar {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      padding: 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap;
+    }
+    .dash-toolbar strong { font-size: 14px; }
+    .dash-toolbar .dash-hint { color: var(--muted); font-size: 12px; font-weight: 400; margin-left: 8px; }
+    .dash-zone { padding: 12px 14px 14px; }
+    .dash-zone + .dash-zone { border-top: 1px solid var(--line); }
+    .dash-zone-label {
+      font-size: 11px; font-weight: 700; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .06em; margin-bottom: 10px;
+    }
+    .dash-zone.drop-zone { outline: 2px dashed #f58220; outline-offset: -4px; background: #fffaf5; }
     .kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
     .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 1px 2px rgba(16,24,40,.06); }
     .kpi {
@@ -119,8 +130,8 @@
     tr.ticket-row:hover td { background: #f2f6fd; }
     a.edit-link { color: #f58220; font-weight: 700; font-size: 12px; text-decoration: none; }
     a.edit-link:hover { text-decoration: underline; }
-    /* --- My Trackers (user-defined cards) --- */
-    .tracker-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin-top: 10px; }
+    /* --- Trackers (user-defined cards, same workspace as KPIs) --- */
+    .tracker-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
     .tracker-card { position: relative; border: 1px solid #e3e7ee; border-radius: 10px; padding: 12px 14px; background: #fbfcfe; }
     .tracker-card .t-title { font-size: 12px; font-weight: 700; color: #5a6577; text-transform: uppercase; letter-spacing: .08em; padding-right: 18px; }
     .tracker-card .t-value { font-size: 26px; font-weight: 800; color: #1d2733; margin-top: 4px; }
@@ -166,7 +177,11 @@
     @media (max-width: 700px) {
       .tracker-card.tbl, .tracker-card.wide { grid-column: span 1; }
     }
-    .tracker-builder { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-top: 10px; padding: 12px; border: 1px dashed #c9d2df; border-radius: 10px; background: #f6f8fb; }
+    .tracker-builder {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px;
+      margin: 0; padding: 12px 14px; border-bottom: 1px solid var(--line);
+      background: #f6f8fb;
+    }
     .tracker-builder select, .tracker-builder input { padding: 7px 9px; border: 1px solid #c9d2df; border-radius: 6px; font-size: 13px; }
     .tracker-builder button { padding: 7px 12px; border-radius: 6px; border: 1px solid #f58220; background: #f58220; color: #fff; font-weight: 700; cursor: pointer; }
     .tracker-builder button.ghost { background: #fff; color: #5a6577; border-color: #c9d2df; }
@@ -194,21 +209,18 @@
       <select id="paymentFilter"><option value="">All Payments</option></select>
       <input id="searchBox" type="search" placeholder="Search customer, ticket, product">
       <button id="refreshBtn">Refresh</button>
+      <button id="logoutBtn" type="button" title="Sign out" style="height:34px;padding:0 12px;border-radius:6px;border:1px solid #c9d2df;background:#fff;color:#5a6577;font-weight:600;font-size:13px;cursor:pointer;">Logout</button>
     </div>
   </header>
   <main>
     <div class="error" id="errorBox"></div>
 
-    <section class="kpi-section">
-      <div class="kpi-toolbar">
-        <strong>KPI Cards</strong>
-        <button id="addKpiBtn" class="tracker-add" type="button">+ Add KPI</button>
-      </div>
-      <div class="kpis" id="kpiCards"></div>
-    </section>
-    <section class="card">
-      <div class="table-toolbar">
-        <strong>My Trackers</strong>
+    <section class="card dash-workspace" id="dashWorkspace">
+      <div class="dash-toolbar">
+        <div>
+          <strong>Dashboard Cards</strong>
+          <span class="dash-hint">KPIs + trackers — edit, reorder, or drag between zones</span>
+        </div>
         <button id="addTrackerBtn" class="tracker-add" type="button">+ Add Card</button>
       </div>
       <div id="trackerBuilder" class="tracker-builder" style="display:none">
@@ -244,11 +256,18 @@
         </select>
         <input id="tDate" type="date" style="display:none">
         <input id="tTitle" placeholder="Card title (optional)">
-        <input id="tSub" placeholder="Subtitle (optional, KPI)">
+        <input id="tSub" placeholder="Subtitle (optional)">
         <button id="tSave" type="button">Add</button>
         <button id="tCancel" class="ghost" type="button">Cancel</button>
       </div>
-      <div id="trackerCards" class="tracker-grid"></div>
+      <div class="dash-zone" id="kpiZone" data-zone="kpi">
+        <div class="dash-zone-label">KPI strip</div>
+        <div class="kpis" id="kpiCards"></div>
+      </div>
+      <div class="dash-zone" id="trackerZone" data-zone="tracker">
+        <div class="dash-zone-label">Trackers</div>
+        <div id="trackerCards" class="tracker-grid"></div>
+      </div>
     </section>
   </main>
   <script src="/auth.js"></script>
@@ -257,11 +276,16 @@
     let statusBase = 'Reading quickbooks.db...';
     let nextAutoRefreshAt = 0;
     let refreshInFlight = false;
-    const AUTO_REFRESH_MS = 15_000;
+    const AUTO_REFRESH_MS = 60_000; // idle refresh once per minute
     const AUTO_REFRESH_STOP_HOUR = 18;
     const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
     const number = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
     const $ = id => document.getElementById(id);
+    const logoutBtn = $('logoutBtn');
+    if (logoutBtn) logoutBtn.addEventListener('click', () => {
+      if (window.aisLogout) window.aisLogout();
+      else location.href = '/login.html';
+    });
     const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     // Local calendar date (NOT UTC). toISOString() is UTC and shifts "today"
     // after ~5pm Pacific, which made Today-Review miss same-day tickets.
@@ -467,33 +491,114 @@
       });
     }
 
-    function wireCardDrag(root, onlyKpi) {
-      let dragFrom = null;
-      root.querySelectorAll(onlyKpi ? '.kpi' : '.tracker-card').forEach(card => {
+    // Shared drag state for KPI strip + tracker grid (same workspace).
+    let dashDragFrom = null;
+
+    function convertCardStyleForZone(card, zone) {
+      if (!card) return card;
+      if (zone === 'kpi' && !isKpiCard(card)) {
+        return {
+          ...card,
+          style: 'kpi',
+          metric: ['amount', 'ar', 'tons', 'tickets', 'customers', 'cash', 'card', 'revenue', 'runs'].includes(card.metric)
+            ? (card.metric === 'runs' ? 'tickets' : card.metric === 'revenue' ? 'amount' : card.metric)
+            : 'amount',
+          period: card.period || 'filter'
+        };
+      }
+      if (zone === 'tracker' && isKpiCard(card)) {
+        return {
+          ...card,
+          style: 'compact',
+          metric: card.metric === 'tickets' ? 'runs'
+            : card.metric === 'amount' ? 'revenue'
+            : (card.metric || 'runs')
+        };
+      }
+      return card;
+    }
+
+    function wireCardDrag(root) {
+      root.querySelectorAll('.kpi, .tracker-card').forEach(card => {
         card.addEventListener('dragstart', e => {
           if (e.target.closest('button, a, input, select, .bar-row, tr.ticket-row')) {
             e.preventDefault();
             return;
           }
-          dragFrom = Number(card.dataset.i);
+          dashDragFrom = Number(card.dataset.i);
           card.classList.add('dragging');
+          try {
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', String(dashDragFrom));
+          } catch { /* ignore */ }
         });
-        card.addEventListener('dragend', () => card.classList.remove('dragging'));
-        card.addEventListener('dragover', e => { e.preventDefault(); card.classList.add('drop-target'); });
+        card.addEventListener('dragend', () => {
+          card.classList.remove('dragging');
+          document.querySelectorAll('.dash-zone.drop-zone, .drop-target').forEach(el => {
+            el.classList.remove('drop-zone', 'drop-target');
+          });
+          dashDragFrom = null;
+        });
+        card.addEventListener('dragover', e => {
+          e.preventDefault();
+          card.classList.add('drop-target');
+        });
         card.addEventListener('dragleave', () => card.classList.remove('drop-target'));
         card.addEventListener('drop', async e => {
           e.preventDefault();
+          e.stopPropagation();
           card.classList.remove('drop-target');
           const to = Number(card.dataset.i);
-          if (dragFrom === null || dragFrom === to) return;
-          // Reorder within the same zone (kpi strip vs trackers)
-          const fromCard = trackerCards[dragFrom];
+          if (dashDragFrom === null || dashDragFrom === to) return;
+          const fromCard = trackerCards[dashDragFrom];
           const toCard = trackerCards[to];
           if (!fromCard || !toCard) return;
-          if (isKpiCard(fromCard) !== isKpiCard(toCard)) return;
-          const [moved] = trackerCards.splice(dragFrom, 1);
-          trackerCards.splice(to, 0, moved);
-          dragFrom = null;
+          const targetZone = isKpiCard(toCard) ? 'kpi' : 'tracker';
+          const from = dashDragFrom;
+          const [movedRaw] = trackerCards.splice(from, 1);
+          let dest = to;
+          if (from < to) dest = to - 1;
+          const moved = convertCardStyleForZone(movedRaw, targetZone);
+          trackerCards.splice(dest, 0, moved);
+          dashDragFrom = null;
+          await saveDashboard();
+          renderKpis();
+          renderTrackers();
+        });
+      });
+    }
+
+    function wireZoneDrop() {
+      ['kpiZone', 'trackerZone'].forEach(id => {
+        const zone = $(id);
+        if (!zone || zone.dataset.wired) return;
+        zone.dataset.wired = '1';
+        zone.addEventListener('dragover', e => {
+          if (dashDragFrom === null) return;
+          e.preventDefault();
+          zone.classList.add('drop-zone');
+        });
+        zone.addEventListener('dragleave', e => {
+          if (!zone.contains(e.relatedTarget)) zone.classList.remove('drop-zone');
+        });
+        zone.addEventListener('drop', async e => {
+          // Card-level drop handles reorder; zone drop only if not on a card
+          if (e.target.closest('.kpi, .tracker-card')) return;
+          e.preventDefault();
+          zone.classList.remove('drop-zone');
+          if (dashDragFrom === null) return;
+          const targetZone = zone.dataset.zone;
+          const [movedRaw] = trackerCards.splice(dashDragFrom, 1);
+          const moved = convertCardStyleForZone(movedRaw, targetZone);
+          if (targetZone === 'kpi') {
+            // Append at end of KPI group
+            let lastKpi = -1;
+            trackerCards.forEach((c, i) => { if (isKpiCard(c)) lastKpi = i; });
+            trackerCards.splice(lastKpi + 1, 0, moved);
+          } else {
+            trackerCards.push(moved);
+          }
+          dashDragFrom = null;
           await saveDashboard();
           renderKpis();
           renderTrackers();
@@ -507,7 +612,7 @@
       if (!el) return;
       const items = trackerCards.map((c, i) => ({ c, i })).filter(x => isKpiCard(x.c));
       if (!items.length) {
-        el.innerHTML = '<div class="card kpi-empty">No KPI cards — click + Add KPI (or Add Card → KPI strip).</div>';
+        el.innerHTML = '<div class="card kpi-empty">No KPI cards — use + Add Card and choose “KPI strip”.</div>';
         return;
       }
       el.innerHTML = items.map(({ c, i }) => {
@@ -528,7 +633,8 @@
           </div>`;
       }).join('');
       wireCardControls(el);
-      wireCardDrag(el, true);
+      wireCardDrag(el);
+      wireZoneDrop();
     }
 
     function trackerRange(c) {
@@ -620,7 +726,7 @@
       const el = $('trackerCards');
       const items = trackerCards.map((c, i) => ({ c, i })).filter(x => !isKpiCard(x.c));
       if (!items.length) {
-        el.innerHTML = '<span class="muted">No tracker cards yet — click + Add Card to build one (e.g. a customer\'s runs this week).</span>';
+        el.innerHTML = '<span class="muted">No tracker cards yet — use + Add Card and pick Highlight / Table / Bars / List.</span>';
         return;
       }
       el.innerHTML = items.map(({ c, i }) => {
@@ -697,7 +803,8 @@
       }).join('');
 
       wireCardControls(el);
-      wireCardDrag(el, false);
+      wireCardDrag(el);
+      wireZoneDrop();
 
       // Click a bar → put that key into the search box (filters Ticket Detail cards with period=filter)
       el.querySelectorAll('.bar-row[data-key]').forEach(row => {
@@ -855,13 +962,6 @@
         $('trackerBuilder').style.display = 'none';
         return;
       }
-      openBuilder(null, 'hl');
-    });
-    $('addKpiBtn').addEventListener('click', () => {
-      if ($('trackerBuilder').style.display !== 'none' && editingIndex === null) {
-        $('trackerBuilder').style.display = 'none';
-        return;
-      }
       openBuilder(null, 'kpi');
     });
     $('tCancel').addEventListener('click', () => { $('trackerBuilder').style.display = 'none'; editingIndex = null; });
@@ -876,13 +976,31 @@
         title: $('tTitle').value.trim() || null,
         sub: ($('tSub')?.value || '').trim() || null
       };
-      if (editingIndex !== null) trackerCards[editingIndex] = card;
-      else trackerCards.push(card);
+      if (editingIndex !== null) {
+        trackerCards[editingIndex] = card;
+      } else if (card.style === 'kpi') {
+        // Keep new KPIs in the strip (after last KPI)
+        let lastKpi = -1;
+        trackerCards.forEach((c, i) => { if (isKpiCard(c)) lastKpi = i; });
+        trackerCards.splice(lastKpi + 1, 0, card);
+      } else {
+        trackerCards.push(card);
+      }
       editingIndex = null;
       $('trackerBuilder').style.display = 'none';
       await saveDashboard();
       renderKpis();
       renderTrackers();
+    });
+    // Live-tweak builder defaults when style changes (metric / period).
+    $('tStyle').addEventListener('change', () => {
+      const style = $('tStyle').value;
+      if (style === 'kpi') {
+        if (!['amount', 'ar', 'tons', 'tickets', 'customers', 'cash', 'card', 'revenue', 'runs'].includes($('tMetric').value)) {
+          $('tMetric').value = 'amount';
+        }
+        if (!$('tPeriod').value || $('tPeriod').value === 'today') $('tPeriod').value = 'filter';
+      }
     });
 
     $('fromDate').value = monthStart();
@@ -892,8 +1010,8 @@
     loadTrackerCards();
     setInterval(() => {
       if (!document.hidden && isAutoRefreshActive() && Date.now() >= nextAutoRefreshAt) refreshDashboard();
-    }, 1000);
-    setInterval(updateAutoRefreshStatus, 1000);
+    }, 5000);
+    setInterval(updateAutoRefreshStatus, 5000);
     scheduleAutoRefresh();
     refreshDashboard();
   </script>
