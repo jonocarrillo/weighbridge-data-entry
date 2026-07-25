@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Driver Signature — AIS</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --panel: #1e293b;
+    --panel-2: #273449;
+    --border: #334155;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --accent: #38bdf8;
+    --green: #22c55e;
+    --danger: #ef4444;
+    --warn: #f59e0b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 15px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  body { display: flex; flex-direction: column; min-height: 100%; }
+  header {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 12px 16px; background: var(--panel); border-bottom: 1px solid var(--border);
+  }
+  header h1 { margin: 0; font-size: 17px; font-weight: 700; }
+  header .meta { font-size: 12px; color: var(--muted); text-align: right; }
+  main { flex: 1; padding: 14px 16px 28px; max-width: 900px; width: 100%; margin: 0 auto; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 14px 16px; margin-bottom: 14px;
+  }
+  .card h2 { margin: 0 0 10px; font-size: 14px; color: var(--muted); text-transform: uppercase;
+    letter-spacing: .04em; font-weight: 700; }
+  .ticket-list { display: flex; flex-direction: column; gap: 8px; max-height: 42vh; overflow: auto; }
+  .ticket-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 12px 14px; border-radius: 10px; background: var(--panel-2);
+    border: 1px solid transparent; cursor: pointer; text-align: left; width: 100%;
+    color: inherit; font: inherit;
+  }
+  .ticket-row:hover, .ticket-row:focus { border-color: var(--accent); outline: none; }
+  .ticket-row.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .ticket-row .left { min-width: 0; }
+  .ticket-row .title { font-weight: 700; font-size: 16px; }
+  .ticket-row .sub { color: var(--muted); font-size: 13px; margin-top: 2px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .badge {
+    flex-shrink: 0; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 999px;
+  }
+  .badge.need { background: rgba(245,158,11,.2); color: var(--warn); }
+  .badge.done { background: rgba(34,197,94,.2); color: var(--green); }
+  .summary { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; font-size: 14px; }
+  .summary .k { color: var(--muted); font-size: 12px; }
+  .summary .v { font-weight: 600; }
+  .sig-frame {
+    position: relative; background: #fff; border-radius: 10px; border: 2px solid var(--border);
+    height: min(42vh, 280px); touch-action: none; overflow: hidden;
+  }
+  .sig-frame.signed { border-color: var(--green); }
+  .sig-frame canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+  .sig-frame .placeholder {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    color: #94a3b8; font-size: 16px; pointer-events: none; font-weight: 600;
+  }
+  .sig-frame.signed .placeholder { display: none; }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+  .btn {
+    border: none; border-radius: 10px; padding: 12px 18px; font-size: 15px; font-weight: 700;
+    cursor: pointer; flex: 1; min-width: 120px;
+  }
+  .btn.primary { background: var(--green); color: #052e16; }
+  .btn.secondary { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .toast {
+    position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%) translateY(12px);
+    background: var(--green); color: #052e16; padding: 12px 18px; border-radius: 10px;
+    font-weight: 700; opacity: 0; transition: .2s; pointer-events: none; z-index: 50;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.err { background: var(--danger); color: #fff; }
+  .empty { color: var(--muted); padding: 18px 4px; text-align: center; }
+  .hidden { display: none !important; }
+  .toolbar { display: flex; gap: 8px; align-items: end; margin-bottom: 10px; flex-wrap: wrap; }
+  .toolbar label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+  .toolbar input {
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 8px 10px; font-size: 14px;
+  }
+</style>
+<script src="/sig-compress.js"></script>
+</head>
+<body>
+<header>
+  <div>
+    <h1>✍️ Driver signature</h1>
+  </div>
+  <div class="meta" id="deviceMeta">Checking device…</div>
+</header>
+
+<main>
+  <div class="card" id="listCard">
+    <h2>Today’s tickets</h2>
+    <div class="toolbar">
+      <label>Date
+        <input type="date" id="dateInput">
+      </label>
+      <button class="btn secondary" type="button" id="refreshBtn" style="flex:0">Refresh</button>
+    </div>
+    <div class="ticket-list" id="ticketList">
+      <div class="empty">Loading…</div>
+    </div>
+  </div>
+
+  <div class="card hidden" id="signCard">
+    <h2>Sign ticket</h2>
+    <div class="summary" id="ticketSummary"></div>
+    <div style="height:12px"></div>
+    <div class="sig-frame" id="sigFrame">
+      <div class="placeholder">Sign here with finger or stylus</div>
+      <canvas id="sigCanvas"></canvas>
+    </div>
+    <div class="actions">
+      <button class="btn secondary" type="button" id="clearBtn">Clear</button>
+      <button class="btn secondary" type="button" id="backBtn">Back to list</button>
+      <button class="btn primary" type="button" id="saveBtn" disabled>Save signature</button>
+    </div>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  const $ = (id) => document.getElementById(id);
+  const listEl = $('ticketList');
+  const dateInput = $('dateInput');
+  const signCard = $('signCard');
+  const listCard = $('listCard');
+  const frame = $('sigFrame');
+  const canvas = $('sigCanvas');
+  const ctx = canvas.getContext('2d');
+
+  let selected = null;
+  let hasSig = false;
+  let drawing = false;
+  let last = null;
+
+  function todayLocal() {
+    const d = new Date();
+    const p = (n) => String(n).padStart(2, '0');
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+  }
+
+  function toast(msg, err) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.className = 'toast show' + (err ? ' err' : '');
+    setTimeout(() => { t.className = 'toast'; }, 2400);
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  async function loadWhoami() {
+    try {
+      const res = await fetch('/api/whoami', { cache: 'no-store' });
+      const data = await res.json();
+      const bits = [];
+      bits.push(data.role === 'signature' ? 'Signature-only' : 'Full access');
+      if (data.ip) bits.push(data.ip);
+      if (data.mac) bits.push(data.mac);
+      $('deviceMeta').textContent = bits.join(' · ');
+      if (data.role !== 'signature') {
+        $('deviceMeta').textContent += ' (not locked — full dashboard still available)';
+      }
+    } catch {
+      $('deviceMeta').textContent = 'Device check failed';
+    }
+  }
+
+  async function loadQueue() {
+    const date = dateInput.value || todayLocal();
+    listEl.innerHTML = '<div class="empty">Loading…</div>';
+    try {
+      const res = await fetch('/api/sign/queue?date=' + encodeURIComponent(date), { cache: 'no-store' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        listEl.innerHTML = '<div class="empty">' + esc(err.error || 'Could not load tickets') + '</div>';
+        return;
+      }
+      const data = await res.json();
+      const tickets = data.tickets || [];
+      if (!tickets.length) {
+        listEl.innerHTML = '<div class="empty">No tickets for ' + esc(date) + '</div>';
+        return;
+      }
+      listEl.innerHTML = tickets.map(t => {
+        const badge = t.hasDriverSignature
+          ? '<span class="badge done">Signed</span>'
+          : '<span class="badge need">Needs signature</span>';
+        const sub = [t.customer, t.truck, t.product].filter(Boolean).join(' · ') || 'No details';
+        return '<button type="button" class="ticket-row" data-id="' + t.id + '">' +
+          '<div class="left"><div class="title">#' + esc(t.ticketNo || t.id) + '</div>' +
+          '<div class="sub">' + esc(sub) + '</div></div>' + badge + '</button>';
+      }).join('');
+      listEl.querySelectorAll('.ticket-row').forEach(btn => {
+        btn.addEventListener('click', () => openTicket(Number(btn.getAttribute('data-id'))));
+      });
+    } catch (e) {
+      listEl.innerHTML = '<div class="empty">Network error</div>';
+    }
+  }
+
+  function resizeCanvas() {
+    const rect = frame.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const prev = canvas.width && canvas.height ? (() => {
+      const c = document.createElement('canvas');
+      c.width = canvas.width; c.height = canvas.height;
+      c.getContext('2d').drawImage(canvas, 0, 0);
+      return c;
+    })() : null;
+    canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+    canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#111';
+    if (prev) ctx.drawImage(prev, 0, 0, rect.width, rect.height);
+  }
+
+  function pos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const p = e.touches ? e.touches[0] : e;
+    return { x: p.clientX - rect.left, y: p.clientY - rect.top };
+  }
+
+  function startDraw(e) {
+    e.preventDefault();
+    drawing = true;
+    hasSig = true;
+    frame.classList.add('signed');
+    $('saveBtn').disabled = false;
+    last = pos(e);
+  }
+  function moveDraw(e) {
+    if (!drawing) return;
+    e.preventDefault();
+    const p = pos(e);
+    ctx.beginPath();
+    ctx.moveTo(last.x, last.y);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+    last = p;
+  }
+  function endDraw(e) {
+    if (!drawing) return;
+    e.preventDefault();
+    drawing = false;
+  }
+
+  canvas.addEventListener('pointerdown', startDraw);
+  canvas.addEventListener('pointermove', moveDraw);
+  canvas.addEventListener('pointerup', endDraw);
+  canvas.addEventListener('pointercancel', endDraw);
+  canvas.addEventListener('pointerleave', endDraw);
+
+  function clearSig() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    hasSig = false;
+    frame.classList.remove('signed');
+    $('saveBtn').disabled = true;
+  }
+
+  function toPngBase64() {
+    if (typeof window.aisCompressSignature === 'function') {
+      return window.aisCompressSignature(canvas);
+    }
+    const out = document.createElement('canvas');
+    out.width = canvas.width;
+    out.height = canvas.height;
+    const oc = out.getContext('2d');
+    oc.fillStyle = '#fff';
+    oc.fillRect(0, 0, out.width, out.height);
+    oc.drawImage(canvas, 0, 0);
+    return out.toDataURL('image/png');
+  }
+
+  async function openTicket(id) {
+    try {
+      // One request: ticket fields + signature PNG (base64) — faster on Wi‑Fi.
+      const res = await fetch('/api/ticket/' + id + '?sig=1', { cache: 'no-store', credentials: 'same-origin' });
+      if (!res.ok) {
+        toast('Ticket not found', true);
+        return;
+      }
+      selected = await res.json();
+      const fields = [
+        ['Ticket #', selected.weighmasterNumber || selected.id],
+        ['Date', selected.transactionDate || ''],
+        ['Customer', selected.customer || ''],
+        ['Truck', selected.truckId || ''],
+        ['Product', selected.productService || ''],
+        ['Net tons', selected.tonage != null ? selected.tonage : '']
+      ];
+      $('ticketSummary').innerHTML = fields.map(([k, v]) =>
+        '<div><div class="k">' + esc(k) + '</div><div class="v">' + esc(v) + '</div></div>'
+      ).join('');
+      listCard.classList.add('hidden');
+      signCard.classList.remove('hidden');
+      clearSig();
+      requestAnimationFrame(() => {
+        resizeCanvas();
+        const dataUrl = selected.driverSignaturePngBase64;
+        if (dataUrl || selected.hasDriverSignature) {
+          const img = new Image();
+          img.onload = () => {
+            const rect = frame.getBoundingClientRect();
+            ctx.drawImage(img, 0, 0, rect.width, rect.height);
+            hasSig = true;
+            frame.classList.add('signed');
+            $('saveBtn').disabled = true;
+          };
+          if (dataUrl) {
+            img.src = dataUrl;
+          } else {
+            img.src = '/api/ticket/' + id + '/signature.png';
+          }
+        }
+      });
+    } catch {
+      toast('Could not open ticket', true);
+    }
+  }
+
+  function backToList() {
+    selected = null;
+    signCard.classList.add('hidden');
+    listCard.classList.remove('hidden');
+    loadQueue();
+  }
+
+  async function saveSig() {
+    if (!selected || !hasSig) return;
+    $('saveBtn').disabled = true;
+    try {
+      const res = await fetch('/api/ticket/' + selected.id + '/signature', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pngBase64: toPngBase64() })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast(data.error || 'Save failed', true);
+        $('saveBtn').disabled = false;
+        return;
+      }
+      toast('Signature saved');
+      setTimeout(backToList, 700);
+    } catch {
+      toast('Network error', true);
+      $('saveBtn').disabled = false;
+    }
+  }
+
+  dateInput.value = todayLocal();
+  $('refreshBtn').onclick = loadQueue;
+  dateInput.onchange = loadQueue;
+  $('clearBtn').onclick = clearSig;
+  $('backBtn').onclick = backToList;
+  $('saveBtn').onclick = saveSig;
+  window.addEventListener('resize', () => { if (!signCard.classList.contains('hidden')) resizeCanvas(); });
+
+  // Deep link: /sign.html?id=123
+  const params = new URLSearchParams(location.search);
+  const deepId = Number(params.get('id') || params.get('ticket') || 0);
+
+  loadWhoami();
+  loadQueue().then(() => {
+    if (deepId) openTicket(deepId);
+  });
+})();
+</script>
+</body>
+</html>
