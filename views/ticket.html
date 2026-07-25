@@ -350,14 +350,19 @@
         <div class="pick-list" id="pick-customers" aria-label="Customer list"></div>
       </label>
     </div>
+    <div class="field" id="projectRow" style="display:none">
+      <span class="lbl">Project / Job Site</span>
+      <div class="pick-list" id="pick-projects" aria-label="Stapled project addresses"></div>
+      <div class="expected-hint" id="projectHint">Stapled addresses for this customer — tap one to fill origin, city, and terms.</div>
+    </div>
     <div class="row cols-3">
       <label class="field">
         <span class="lbl">Weighmaster #</span>
         <input type="text" id="fWeighmasterNumber" class="readonly" readonly>
       </label>
       <label class="field">
-        <span class="lbl">Invoice #</span>
-        <input type="text" id="fInvoiceNumber" class="readonly" readonly>
+        <span class="lbl" id="lblDocNumber">Sales Receipt #</span>
+        <input type="text" id="fInvoiceNumber" class="readonly" readonly title="Number depends on payment: AR=Invoice, CASH/CREDIT/DEBIT=Sales Receipt, EXPENSE=Expense">
       </label>
       <label class="field">
         <span class="lbl">Date</span>
@@ -370,7 +375,7 @@
     </label>
   </section>
 
-  <!-- Step 2: Weights -->
+  <!-- Step 2: Weights (two-stage: save inbound first, outbound when truck returns) -->
   <section class="panel" data-step="2" data-title="Weights">
     <h2>Weights &amp; Time</h2>
     <div class="row cols-2">
@@ -441,6 +446,22 @@
         <label><input type="radio" name="payment" value="AR"> AR</label>
         <label><input type="radio" name="payment" value="EXPENSE"> EXPENSE</label>
       </div>
+    </div>
+    <div class="row cols-2" id="arTermsRow" style="display:none">
+      <label class="field">
+        <span class="lbl">AR Terms</span>
+        <select id="fPaymentTerms">
+          <option value="Net 10">Net 10</option>
+          <option value="Net 15">Net 15</option>
+          <option value="Net 30" selected>Net 30</option>
+          <option value="Net 45">Net 45</option>
+          <option value="Net 60">Net 60</option>
+        </select>
+      </label>
+      <label class="field">
+        <span class="lbl">Due Date</span>
+        <input type="date" id="fDueDate">
+      </label>
     </div>
   </section>
 
@@ -541,6 +562,7 @@
         sandbox="allow-same-origin allow-scripts allow-modals"></iframe>
 
 <script src="/auth.js"></script>
+<script src="/sig-compress.js"></script>
 <script>
 'use strict';
 
@@ -589,6 +611,8 @@ const f = {
   product: $('fProduct'),
   rate: $('fRate'),
   amount: $('fAmount'),
+  paymentTerms: $('fPaymentTerms'),
+  dueDate: $('fDueDate'),
   memo: $('fMemo'),
   city: $('fCity'),
   origin: $('fOrigin'),
@@ -598,6 +622,39 @@ const f = {
   weightCert: $('fWeightCert'),
   recyclingCert: $('fRecyclingCert'),
 };
+
+// Stapled project addresses for the current customer (from /api/companies/lookup or /api/projects).
+let customerProjects = [];
+let selectedProjectId = null;
+
+function termsDaysFromLabel(label) {
+  const m = /net\s*(\d+)/i.exec(String(label || ''));
+  return m ? Number(m[1]) : 30;
+}
+
+function computeDueDateFromForm() {
+  if (readPayment() !== 'AR' || !f.dueDate) return;
+  const base = f.date.value || localYmd();
+  const days = termsDaysFromLabel(f.paymentTerms && f.paymentTerms.value);
+  const parts = base.split('-').map(Number);
+  if (!parts[0]) return;
+  const dt = new Date(parts[0], parts[1] - 1, parts[2]);
+  dt.setDate(dt.getDate() + days);
+  f.dueDate.value = localYmd(dt);
+}
+
+function syncArTermsVisibility() {
+  const row = $('arTermsRow');
+  if (!row) return;
+  const isAr = readPayment() === 'AR';
+  row.style.display = isAr ? '' : 'none';
+  if (isAr) {
+    if (f.paymentTerms && !f.paymentTerms.value) f.paymentTerms.value = 'Net 30';
+    computeDueDateFromForm();
+  } else if (f.dueDate) {
+    f.dueDate.value = '';
+  }
+}
 
 // Full lists from /api/dropdowns — used to render clickable chips (filtered as you type).
 const dropdownCache = {
@@ -615,6 +672,14 @@ function setPayment(val) {
   const el = document.querySelector(`input[name=payment][value=${val}]`);
   if (el) el.checked = true;
 }
+// Payment radios → document series preview + AR terms visibility.
+document.querySelectorAll('input[name=payment]').forEach(r => {
+  r.addEventListener('change', () => {
+    refreshDocPreviewForPayment();
+    syncArTermsVisibility();
+  });
+});
+
 // Maps a pricing rule's account_type to a payment radio value. "Account" is the
 // legacy spelling of AR. "Regular" (or unknown) returns null = no auto-select.
 function accountTypeToPayment(at) {
@@ -643,6 +708,146 @@ function fmtNum(n, digits = 0) {
 function fmtMoney(n) {
   if (n == null) return '';
   return n.toFixed(2);
+}
+
+// ---------- company profile → payment + AR terms + stapled projects ----------
+let lastCompanyLookup = '';
+
+function setTermsSelect(terms) {
+  if (!f.paymentTerms || !terms) return;
+  const want = String(terms);
+  const opt = Array.from(f.paymentTerms.options).find(
+    o => o.value.toLowerCase() === want.toLowerCase()
+  );
+  if (opt) f.paymentTerms.value = opt.value;
+  else {
+    const o = document.createElement('option');
+    o.value = want;
+    o.textContent = want;
+    f.paymentTerms.appendChild(o);
+    f.paymentTerms.value = want;
+  }
+  computeDueDateFromForm();
+}
+
+function renderProjectPicker() {
+  const row = $('projectRow');
+  const box = $('pick-projects');
+  if (!row || !box) return;
+  if (!customerProjects.length) {
+    row.style.display = 'none';
+    box.innerHTML = '';
+    return;
+  }
+  row.style.display = '';
+  box.innerHTML = customerProjects.map(pr => {
+    const label = pr.displayName || [pr.label, pr.address, pr.city].filter(Boolean).join(' — ');
+    const sel = selectedProjectId != null && Number(pr.id) === Number(selectedProjectId);
+    return `<button type="button" class="chip${sel ? ' selected' : ''}" data-id="${pr.id}" title="${escapeHtml(label)}">${escapeHtml(label)}</button>`;
+  }).join('') +
+    `<button type="button" class="chip${selectedProjectId == null ? ' selected' : ''}" data-id="" title="No specific project">Other / none</button>`;
+
+  box.querySelectorAll('button.chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const raw = btn.getAttribute('data-id');
+      if (!raw) {
+        selectedProjectId = null;
+        renderProjectPicker();
+        schedulePricingLookup();
+        return;
+      }
+      const id = Number(raw);
+      const pr = customerProjects.find(x => Number(x.id) === id);
+      if (pr) applyProject(pr);
+    });
+  });
+}
+
+function applyProject(pr) {
+  if (!pr) return;
+  selectedProjectId = pr.id;
+  if (pr.address) f.origin.value = pr.address;
+  if (pr.city) f.city.value = pr.city;
+  const pay = accountTypeToPayment(pr.accountType);
+  if (pay) {
+    setPayment(pay);
+    syncArTermsVisibility();
+    refreshDocPreviewForPayment();
+  }
+  if (pay === 'AR' || (pr.accountType || '').toUpperCase() === 'AR' || pr.paymentTerms) {
+    if (pr.paymentTerms) setTermsSelect(pr.paymentTerms);
+    else if (pay === 'AR') setTermsSelect('Net 30');
+  }
+  renderProjectPicker();
+  renderPickList('pick-cities', dropdownCache.cities, f.city);
+  schedulePricingLookup();
+  const hint = $('projectHint');
+  if (hint) {
+    const termsBit = pr.paymentTerms ? ` · ${pr.paymentTerms}` : '';
+    hint.textContent = `Using ${pr.displayName || pr.address}${termsBit}`;
+    hint.className = 'expected-hint found';
+  }
+}
+
+async function applyCompanyProfile(options = {}) {
+  const keepProject = options.keepProject === true;
+  const preservedProjectId = keepProject ? selectedProjectId : null;
+  const name = (f.customer.value || '').trim();
+  if (!name) {
+    customerProjects = [];
+    selectedProjectId = null;
+    renderProjectPicker();
+    return;
+  }
+  if (name === lastCompanyLookup && !options.force) {
+    if (keepProject) {
+      selectedProjectId = preservedProjectId;
+      renderProjectPicker();
+    }
+    return;
+  }
+  lastCompanyLookup = name;
+  if (!keepProject) selectedProjectId = null;
+  try {
+    const res = await fetch('/api/companies/lookup?name=' + encodeURIComponent(name));
+    if (!res.ok) {
+      // Still try projects-only list for customers without a company row.
+      await loadProjectsForCustomer(name);
+      if (keepProject) selectedProjectId = preservedProjectId;
+      renderProjectPicker();
+      return;
+    }
+    const co = await res.json();
+    customerProjects = Array.isArray(co.projects) ? co.projects : [];
+    if (keepProject) {
+      selectedProjectId = preservedProjectId;
+    }
+    renderProjectPicker();
+    // When loading an existing ticket, don't overwrite payment/terms already set.
+    if (options.skipDefaults) return;
+    // Default payment from company account type
+    const pay = accountTypeToPayment(co.accountType);
+    if (pay) {
+      setPayment(pay);
+      syncArTermsVisibility();
+      refreshDocPreviewForPayment();
+    }
+    if (pay === 'AR' || (co.accountType || '').toUpperCase() === 'AR') {
+      setTermsSelect(co.paymentTerms || 'Net 30');
+    }
+  } catch { /* no profile yet */ }
+}
+
+async function loadProjectsForCustomer(name) {
+  try {
+    const res = await fetch('/api/projects?customer=' + encodeURIComponent(name));
+    if (!res.ok) { customerProjects = []; renderProjectPicker(); return; }
+    customerProjects = await res.json();
+    renderProjectPicker();
+  } catch {
+    customerProjects = [];
+    renderProjectPicker();
+  }
 }
 
 // ---------- truck → tare auto-fill ----------
@@ -738,6 +943,7 @@ async function runPricingLookup() {
   if (f.customer.value) params.set('customer', f.customer.value);
   if (f.product.value) params.set('product', f.product.value);
   if (f.date.value) params.set('date', f.date.value);
+  if (selectedProjectId) params.set('projectAddressId', String(selectedProjectId));
   const tonsText = f.netTons.value;
   const tons = parseNumber(tonsText);
   if (tons != null) params.set('tons', tons);
@@ -775,8 +981,16 @@ async function runPricingLookup() {
     }
     // The matched pricing rule's account_type carries the default payment method.
     // Auto-select that radio; the operator can still change it before saving.
+    // Skip if a project already forced payment (operator can still change radios).
     const rulePayment = accountTypeToPayment(data.accountType);
-    if (rulePayment) setPayment(rulePayment);
+    if (rulePayment) {
+      setPayment(rulePayment);
+      syncArTermsVisibility();
+      refreshDocPreviewForPayment();
+    }
+    if (data.paymentTerms && readPayment() === 'AR') {
+      setTermsSelect(data.paymentTerms);
+    }
   } catch (err) {
     $('expectedHint').className = 'expected-hint';
     $('expectedHint').textContent = 'Expected: --';
@@ -798,9 +1012,13 @@ function wireEvents() {
     schedulePricingLookup();
   });
   f.customer.addEventListener('input', () => {
+    lastCompanyLookup = ''; // allow re-lookup when name changes
     renderPickList('pick-customers', dropdownCache.customers, f.customer);
     schedulePricingLookup();
   });
+  f.customer.addEventListener('change', () => { applyCompanyProfile(); });
+  f.customer.addEventListener('blur', () => { applyCompanyProfile(); });
+  // Re-price when origin changes (manual address may not be a stapled project).
   f.product.addEventListener('input', () => {
     renderPickList('pick-products', dropdownCache.products, f.product);
     schedulePricingLookup();
@@ -914,27 +1132,60 @@ function renderPickList(containerId, items, inputEl) {
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 // ---------- defaults ----------
+function setDocNumberLabel(label, documentType) {
+  const el = $('lblDocNumber');
+  if (el) el.textContent = label || 'Document #';
+  f.invoiceNumber.title = documentType
+    ? `${documentType} number (preview — final # assigned on Save)`
+    : 'Preview — final # assigned when you Save';
+}
+
 async function loadDefaults() {
-  const res = await fetch('/api/ticket/defaults');
+  const pay = readPayment();
+  const res = await fetch('/api/ticket/defaults?payment=' + encodeURIComponent(pay));
   const d = await res.json();
+  // Preview only — final numbers are assigned by the server on first Save.
   f.weighmasterNumber.value = d.weighmasterNumber || '';
-  f.invoiceNumber.value = d.invoiceNumber || '';
+  f.invoiceNumber.value = d.documentNumber || d.invoiceNumber || '';
+  f.weighmasterNumber.title = 'Weighmaster ticket # — final # assigned when you Save';
+  setDocNumberLabel(d.documentLabel || 'Document #', d.documentType);
   if (!f.date.value) f.date.value = d.date;
   state.signatureLine = d.signatureLine || 'Jesus Polanco';
   if (!f.byPerson.value) f.byPerson.value = state.signatureLine;
 }
 
+/** When payment changes on a NEW ticket, refresh document # preview (series changes). */
+async function refreshDocPreviewForPayment() {
+  if (state.id) {
+    // Existing ticket keeps its document #; only update label.
+    const series = {
+      AR: 'Invoice #',
+      EXPENSE: 'Expense #',
+      CASH: 'Sales Receipt #',
+      CREDIT: 'Sales Receipt #',
+      DEBIT: 'Sales Receipt #'
+    };
+    setDocNumberLabel(series[readPayment()] || 'Document #', null);
+    return;
+  }
+  try {
+    const res = await fetch('/api/ticket/defaults?payment=' + encodeURIComponent(readPayment()));
+    const d = await res.json();
+    f.invoiceNumber.value = d.documentNumber || d.invoiceNumber || '';
+    setDocNumberLabel(d.documentLabel || 'Document #', d.documentType);
+  } catch { /* ignore */ }
+}
+
 // ---------- save / load ----------
 function buildRequest() {
-  return {
-    weighmasterNumber: f.weighmasterNumber.value || null,
-    invoiceNumber: f.invoiceNumber.value || null,
+  const payload = {
     date: f.date.value || null,
     truck: f.truck.value || null,
     customer: f.customer.value || null,
     product: f.product.value || null,
     city: f.city.value || null,
     origin: f.origin.value || null,
+    projectAddressId: selectedProjectId || null,
     wasteData: f.wasteData.value || null,
     memo: f.memo.value || null,
     notes: f.notes.value || null,
@@ -948,14 +1199,64 @@ function buildRequest() {
     byPerson: f.byPerson.value || null,
     weightCertificate: f.weightCert.checked,
     recyclingCdCertificate: f.recyclingCert.checked,
-    // Signature is sent with the main save now — atomic on the DB side.
-    driverSignaturePngBase64: state.hasSignature && state.signatureDirty ? canvasToPngBase64() : null,
   };
+  // NEW tickets: server assigns sequential ticket + document # at save time.
+  // EDITS: send the numbers on the form so they stay stable.
+  if (state.id) {
+    payload.weighmasterNumber = f.weighmasterNumber.value || null;
+    payload.invoiceNumber = f.invoiceNumber.value || null;
+  }
+  if (readPayment() === 'AR') {
+    payload.paymentTerms = (f.paymentTerms && f.paymentTerms.value) || 'Net 30';
+    payload.dueDate = (f.dueDate && f.dueDate.value) || null;
+  } else {
+    payload.paymentTerms = null;
+    payload.dueDate = null;
+  }
+  // Only send signature when the pad changed. Omitting the field tells the
+  // server to KEEP the existing BLOB (null used to wipe it on every Save).
+  if (state.signatureDirty) {
+    payload.driverSignaturePngBase64 = state.hasSignature ? canvasToPngBase64() : '';
+  }
+  return payload;
+}
+
+/**
+ * Two-stage weigh: allow SAVE with inbound only (truck dumps in between).
+ * Outbound can be filled later when the truck returns.
+ */
+function validateFormForSave() {
+  if (!f.customer.value.trim()) {
+    goStep(1);
+    return 'Company / hauler is required';
+  }
+  const gross = parseNumber(f.gross.value);
+  const tare = parseNumber(f.tare.value);
+  if (gross == null) {
+    goStep(2);
+    f.gross.focus();
+    return 'Inbound weight (GROSS, lb) is required for the first save';
+  }
+  if (gross < 0 || (tare != null && tare < 0)) {
+    goStep(2);
+    return 'Weights cannot be negative';
+  }
+  if (tare != null && gross === tare) {
+    goStep(2);
+    return 'Inbound and outbound weights cannot be the same';
+  }
+  // Auto-stamp times if operator entered weights but skipped the clock buttons.
+  if (f.gross.value && !f.timeIn.value) f.timeIn.value = nowHHmm();
+  if (f.tare.value && !f.timeOut.value) f.timeOut.value = nowHHmm();
+  recalcNet();
+  return null;
 }
 
 async function saveTicket(thenPrint) {
   if (state.saveInFlight) return; // double-click guard
-  if (!f.customer.value.trim()) { toast('Company / hauler is required', 'error'); return; }
+
+  const formErr = validateFormForSave();
+  if (formErr) { toast(formErr, 'error'); return; }
 
   state.saveInFlight = true;
   const saveButtons = [$('btnSave'), $('btnSavePrint')];
@@ -976,6 +1277,11 @@ async function saveTicket(thenPrint) {
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: `Save failed (HTTP ${res.status})` }));
         toast(err.error || 'Save failed', 'error');
+        // Jump to the step most likely related to the error.
+        const msg = String(err.error || '');
+        if (/inbound|outbound|weight|gross|tare/i.test(msg)) goStep(2);
+        else if (/product/i.test(msg)) goStep(3);
+        else if (/customer|hauler/i.test(msg)) goStep(1);
         return;
       }
       saved = await res.json();
@@ -990,6 +1296,15 @@ async function saveTicket(thenPrint) {
     // Sync the radio button to whatever the server resolved (Account customers get
     // forced to AR by BuildEntry; this keeps the UI honest).
     if (saved.payment) setPayment(saved.payment);
+    if (saved.documentLabel) setDocNumberLabel(saved.documentLabel, saved.documentType);
+    if (saved.documentNumber || saved.invoiceNumber) {
+      f.invoiceNumber.value = saved.documentNumber || saved.invoiceNumber;
+    }
+    // Reflect server-computed money/rate when present.
+    if (saved.amount != null && !state.amountManuallyEdited) {
+      setAmountProgrammatic(Number(saved.amount).toFixed(2));
+    }
+    if (saved.rate != null) updateRateDisplay(Number(saved.rate));
     $('modeLabel').textContent = `Editing #${saved.weighmasterNumber} (id=${saved.id})`;
     $('btnPrint').disabled = false;
     state.signatureDirty = false; // PNG was sent with this save
@@ -1006,12 +1321,21 @@ async function saveTicket(thenPrint) {
 }
 
 async function loadTicket(id) {
-  const res = await fetch('/api/ticket/' + id);
+  // ?sig=1 = ticket + signature in ONE response (much faster on LAN/Wi‑Fi).
+  const res = await fetch('/api/ticket/' + id + '?sig=1', { credentials: 'same-origin' });
   if (!res.ok) { toast('Ticket not found', 'error'); return; }
   const t = await res.json();
   state.id = id;
   f.weighmasterNumber.value = t.weighmasterNumber || '';
   f.invoiceNumber.value = t.invoiceNumber || t.documentNumber || '';
+  {
+    const pay = (t.payment || 'CASH').toUpperCase();
+    const labels = { AR: 'Invoice #', EXPENSE: 'Expense #', CASH: 'Sales Receipt #', CREDIT: 'Sales Receipt #', DEBIT: 'Sales Receipt #' };
+    setDocNumberLabel(t.documentType === 'Invoice' ? 'Invoice #'
+      : t.documentType === 'Expense' ? 'Expense #'
+      : t.documentType === 'Sales Receipt' ? 'Sales Receipt #'
+      : (labels[pay] || 'Document #'), t.documentType);
+  }
   f.date.value = (t.transactionDate || '').slice(0, 10);
   f.truck.value = t.truckId || '';
   f.customer.value = t.customer || '';
@@ -1019,12 +1343,18 @@ async function loadTicket(id) {
   f.notes.value = t.ticketNotes || '';
   f.timeIn.value = t.timeIn || '';
   f.timeOut.value = t.timeOut || '';
-  f.gross.value = t.t1 != null ? Math.round(t.t1) : '';
-  f.tare.value = t.t2 != null ? Math.round(t.t2) : '';
+  // Keep full pound precision (don't Math.round away tenths if present).
+  f.gross.value = t.t1 != null && t.t1 !== '' ? String(t.t1) : '';
+  f.tare.value = t.t2 != null && t.t2 !== '' ? String(t.t2) : '';
   f.memo.value = t.memo || '';
   f.city.value = t.city || '';
   f.origin.value = t.origin || '';
   f.product.value = t.productService || '';
+  // Restore stapled project chip without overwriting ticket payment/terms/origin.
+  selectedProjectId = t.projectAddressId != null ? Number(t.projectAddressId) : null;
+  lastCompanyLookup = '';
+  await applyCompanyProfile({ keepProject: true, force: true, skipDefaults: true });
+  renderProjectPicker();
   // Match WinForms behavior: a loaded ticket starts "not manually edited" so that
   // changing customer/product/date will recompute the amount from pricing. The flag
   // is set only by subsequent direct edits via the input handler.
@@ -1032,9 +1362,23 @@ async function loadTicket(id) {
   setAmountProgrammatic(t.amount != null ? Number(t.amount).toFixed(2) : '');
   f.weighmasterSig.value = t.weighmaster || '';
   f.byPerson.value = t.byPerson || state.signatureLine;
-  f.weightCert.checked = !!t.weightCertificate;
-  f.recyclingCert.checked = !!t.recyclingCdCertificate;
+  f.weightCert.checked = !!(Number(t.weightCertificate) === 1 || t.weightCertificate === true || t.weightCertificate === 'Yes');
+  f.recyclingCert.checked = !!(Number(t.recyclingCdCertificate) === 1 || t.recyclingCdCertificate === true || t.recyclingCdCertificate === 'Yes');
   setPayment((t.payment || 'CASH').toUpperCase());
+  syncArTermsVisibility();
+  if (f.paymentTerms && t.paymentTerms) {
+    const want = String(t.paymentTerms);
+    const opt = Array.from(f.paymentTerms.options).find(o => o.value === want || o.value.toLowerCase() === want.toLowerCase());
+    if (opt) f.paymentTerms.value = opt.value;
+    else {
+      const o = document.createElement('option');
+      o.value = want;
+      o.textContent = want;
+      f.paymentTerms.appendChild(o);
+      f.paymentTerms.value = want;
+    }
+  }
+  if (f.dueDate) f.dueDate.value = (t.dueDate || '').slice(0, 10);
   recalcNet();
   // Prefer stored rate (amount÷qty) when present; pricing lookup may refresh it.
   if (t.rate != null) updateRateDisplay(Number(t.rate));
@@ -1044,18 +1388,20 @@ async function loadTicket(id) {
   schedulePricingLookup();
   $('btnPrint').disabled = false;
   $('modeLabel').textContent = `Editing #${t.weighmasterNumber || ''} (id=${id})`;
+  if (t.t1 == null || t.t2 == null) goStep(2);
 
-  // Repaint the stored signature so the operator can see what's on file. The
-  // signatureDirty flag stays false — buildRequest() will skip resending the PNG
-  // unless they draw new ink, avoiding pointless BLOB writes on every edit-save.
-  if (t.hasDriverSignature) {
+  // Signature: prefer embedded base64 (no second network hop).
+  state.signatureDirty = false;
+  if (t.driverSignaturePngBase64) {
     state.hasSignature = true;
-    state.signatureDirty = false;
     $('sigFrame').classList.add('signed');
-    SigPad.loadFromUrl('/api/ticket/' + id + '/signature.png?ts=' + Date.now());
+    SigPad.loadFromDataUrl(t.driverSignaturePngBase64);
+  } else if (t.hasDriverSignature) {
+    state.hasSignature = true;
+    $('sigFrame').classList.add('signed');
+    SigPad.loadFromUrl('/api/ticket/' + id + '/signature.png');
   } else {
     state.hasSignature = false;
-    state.signatureDirty = false;
     SigPad.clear();
   }
 }
@@ -1101,6 +1447,15 @@ function clearForm() {
   state.hasSignature = false;
   state.signatureDirty = false;
   state.expectedRate = null;
+  selectedProjectId = null;
+  customerProjects = [];
+  lastCompanyLookup = '';
+  renderProjectPicker();
+  const ph = $('projectHint');
+  if (ph) {
+    ph.textContent = 'Stapled addresses for this customer — tap one to fill origin, city, and terms.';
+    ph.className = 'expected-hint';
+  }
   for (const key in f) {
     const el = f[key];
     if (el.type === 'checkbox') el.checked = false;
@@ -1221,21 +1576,40 @@ const SigPad = (() => {
       state.signatureDirty = true; // clear is an intentional change → save it
       frame.classList.remove('signed');
     },
-    loadFromUrl(url) {
+    loadFromDataUrl(dataUrl) {
+      if (!dataUrl) return;
       const img = new Image();
-      img.crossOrigin = 'anonymous';
       img.onload = () => {
         const rect = canvas.getBoundingClientRect();
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(img, 0, 0, rect.width, rect.height);
       };
-      img.onerror = () => { /* leave canvas blank if the BLOB isn't there */ };
-      img.src = url;
+      img.src = dataUrl;
+    },
+    async loadFromUrl(url) {
+      // Fallback path when signature was not embedded in ticket JSON.
+      try {
+        const res = await fetch(url, { credentials: 'same-origin', cache: 'force-cache' });
+        if (!res.ok) return;
+        const blob = await res.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const img = new Image();
+        img.onload = () => {
+          const rect = canvas.getBoundingClientRect();
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0, rect.width, rect.height);
+          URL.revokeObjectURL(objectUrl);
+        };
+        img.onerror = () => { URL.revokeObjectURL(objectUrl); };
+        img.src = objectUrl;
+      } catch { /* leave canvas blank */ }
     },
     toPng() {
       if (!state.hasSignature) return null;
-      // Re-render onto a white background so the PNG isn't transparent (printers
-      // and the WinForms BLOB-loader both handle it cleaner that way).
+      // Scale + JPEG/PNG pick via shared compressor (keeps DB/LAN small).
+      if (typeof window.aisCompressSignature === 'function') {
+        return window.aisCompressSignature(canvas);
+      }
       const out = document.createElement('canvas');
       out.width = canvas.width;
       out.height = canvas.height;
@@ -1291,15 +1665,24 @@ async function init() {
   buildStepperBar();
   wireEvents();
   goStep(1);
-  await loadDefaults();
-  await loadDropdowns();
+  if (f.paymentTerms) {
+    f.paymentTerms.addEventListener('change', computeDueDateFromForm);
+  }
+  if (f.date) {
+    f.date.addEventListener('change', () => {
+      if (readPayment() === 'AR') computeDueDateFromForm();
+    });
+  }
+  const params = new URLSearchParams(location.search);
+  const editId = params.get('id') ? Number(params.get('id')) : null;
+  // Parallel loads — sequential awaits made the form feel stuck.
+  const jobs = [loadDefaults(), loadDropdowns()];
+  if (editId) jobs.push(loadTicket(editId));
+  await Promise.all(jobs);
   // Prefer server local date from defaults; fall back to browser local calendar.
   if (!f.date.value) f.date.value = localYmd();
+  if (!editId) syncArTermsVisibility();
   SigPad.resize();
-
-  // If URL has ?id=, load that ticket.
-  const params = new URLSearchParams(location.search);
-  if (params.get('id')) loadTicket(Number(params.get('id')));
 }
 init();
 </script>
