@@ -6,9 +6,10 @@
 <title>Email Export — AIS</title>
 <style>
   :root {
-    --bg:#f2f3f5; --panel:#fff; --line:#d8dde3; --text:#1c1f24; --muted:#6b7380;
-    --accent:#00c8dc; --orange:#f58220; --green:#3cb446; --slate:#465f82; --error:#b53030;
-    --label:#4a73b8; --warn-bg:#fff7e6; --warn-line:#e8c477;
+    color-scheme: dark;
+    --bg:#0b1220; --panel:#141c2b; --line:#2a364a; --text:#e8eef7; --muted:#93a0b4;
+    --accent:#38bdf8; --orange:#f58220; --green:#22c55e; --slate:#465f82; --error:#f87171;
+    --label:#7dd3fc; --warn-bg:rgba(245,158,11,0.12); --warn-line:#b45309;
   }
   * { box-sizing:border-box; }
   body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 "Segoe UI",system-ui,sans-serif; }
@@ -25,7 +26,7 @@
   label.field { display:block; margin-bottom:10px; }
   label.field > .lbl { display:block; color:var(--label); font-size:11px; text-transform:uppercase; letter-spacing:.5px; margin-bottom:3px; font-weight:600; }
   input[type=text], input[type=number], input[type=password], input[type=email], input[type=date], select {
-    width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:4px; background:#fff; font:inherit; color:var(--text);
+    width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:4px; background:var(--bg); color:var(--text); font:inherit; color:var(--text);
   }
   input:focus, select:focus { outline:2px solid var(--accent); outline-offset:-1px; border-color:var(--accent); }
   .checks { display:flex; flex-wrap:wrap; gap:18px; padding:4px 0; }
@@ -37,7 +38,7 @@
   button.btn.primary { background:var(--accent); }
   button.btn.orange { background:var(--orange); }
   button.btn.slate { background:var(--slate); }
-  button.btn.ghost { background:transparent; color:var(--slate); border:1px solid var(--line); }
+  button.btn.ghost { background:transparent; color:var(--text); border:1px solid var(--line); }
   .hint { font-size:12px; color:var(--muted); margin-top:4px; }
   .note { background:var(--warn-bg); border:1px solid var(--warn-line); border-radius:5px; padding:10px 12px; font-size:12.5px; color:#6b5418; margin-bottom:14px; }
   .note b { color:#5a4510; }

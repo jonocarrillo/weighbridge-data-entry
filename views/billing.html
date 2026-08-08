@@ -6,17 +6,18 @@
 <title>AR Billing Export — AIS</title>
 <style>
   :root {
-    --bg: #f2f3f5;
-    --panel: #ffffff;
-    --line: #d8dde3;
-    --text: #1c1f24;
-    --muted: #6b7380;
-    --accent: #00c8dc;
-    --accent-hover: #00aebf;
+    color-scheme: dark;
+    --bg: #0b1220;
+    --panel: #141c2b;
+    --line: #2a364a;
+    --text: #e8eef7;
+    --muted: #93a0b4;
+    --accent: #38bdf8;
+    --accent-hover: #0ea5e9;
     --orange: #f58220;
-    --slate: #465f82;
-    --label: #4a73b8;
-    --error: #b53030;
+    --slate: #64748b;
+    --label: #7dd3fc;
+    --error: #f87171;
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
@@ -100,10 +101,10 @@
 
   table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
   table.grid th, table.grid td { padding: 7px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-  table.grid th { background: #f8f9fb; font-weight: 600; color: var(--label); text-align: left; position: sticky; top: 0; z-index: 1; }
+  table.grid th { background: #1c2638; font-weight: 600; color: var(--label); text-align: left; position: sticky; top: 0; z-index: 1; }
   table.grid td.num { text-align: right; font-variant-numeric: tabular-nums; }
   table.grid tbody tr:hover { background: #f3f7ff; }
-  table.grid tfoot td { background: #f8f9fb; font-weight: 600; }
+  table.grid tfoot td { background: #1c2638; font-weight: 600; }
   .empty { padding: 32px; text-align: center; color: var(--muted); font-style: italic; }
 
   .toast {
